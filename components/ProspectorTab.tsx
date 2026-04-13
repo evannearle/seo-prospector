@@ -21,11 +21,13 @@ export default function ProspectorTab() {
 
   // Load defaults from settings
   const settings = loadSettings()
-  const [niche, setNiche]     = useState(settings.defaultNiche || 'plumber')
+  const [niche, setNiche]       = useState(settings.defaultNiche || 'plumber')
   const [customNiche, setCustomNiche] = useState('')
-  const [loc, setLoc]         = useState(settings.defaultLocation || 'Farmingdale, NY')
-  const [maxR, setMaxR]       = useState(settings.defaultMaxResults || '40')
+  const [locations, setLocations] = useState<string[]>([settings.defaultLocation || 'Farmingdale, NY'])
+  const [locInput, setLocInput] = useState('')
+  const [maxR, setMaxR]         = useState(settings.defaultMaxResults || '40')
   const [minScore, setMinScore] = useState('1')
+  const [currentLocIdx, setCurrentLocIdx] = useState(0)
 
   const [activeSigs, setActiveSigs] = useState<Set<string>>(new Set([
     'fewReviews','lowRating','noWebsite','noPhone','noHours','fewPhotos',
@@ -176,55 +178,68 @@ export default function ProspectorTab() {
       return
     }
     if (!activeSigs.size) { alert('Toggle on at least one signal'); return }
+    if (locations.length === 0) { alert('Add at least one location to search'); return }
     setRunning(true); setLogLines([]); setPct(0); setResults([]); setFiltered([]); setSavedCount(0)
+    const allScored: Lead[] = []
+    const seenPlaceIds = new Set<string>()
     try {
       mapsReady.current = false
       log('linfo', '→ Loading Google Maps SDK...')
       await loadMaps(apiKey)
-      log('lok', '✓ Maps ready'); setPct(10)
-      log('linfo', `→ Geocoding "${loc}"...`)
-      const latlng = await geocode(loc)
-      log('lok', '✓ Location found'); setPct(18)
-      log('linfo', `→ Searching for ${actualNiche}s...`)
-      const places = await nearbySearch(latlng, actualNiche, parseInt(maxR))
-      if (!places.length) throw new Error(`No results found. Try a broader location.`)
-      log('lok', `✓ ${places.length} businesses found`); setPct(25)
-      const city = loc.split(',')[0].trim()
-      const currentActiveSigs = new Set(Array.from(activeSigs)) // snapshot — avoid stale closure
-      const webSigsOn = ['noSchema','noMeta','noMobile','noSSL','noCityMention','slowSite'].some(s => currentActiveSigs.has(s))
-      const scored: Lead[] = []
+      log('lok', '✓ Maps ready')
 
-      for (let i = 0; i < places.length; i++) {
-        const basic = places[i]
-        setPct(25 + Math.round((i / places.length) * 65))
-        log('linfo', `  → ${basic.name}`)
-        const detail = await getDetails(basic.place_id)
-        if (!detail) { log('lwarn', '  ⚠ Skipped'); continue }
+      for (let locIdx = 0; locIdx < locations.length; locIdx++) {
+        const loc = locations[locIdx]
+        setCurrentLocIdx(locIdx)
+        const locPct = (locIdx / locations.length) * 100
+        const locShare = 100 / locations.length
 
-        // Fetch website data if web signals are active
-        let webData: WebAnalysis | null = null
-        if (detail.website) {
-          if (webSigsOn) {
-            webData = await analyzeWebsite(detail.website, city)
-          } else {
-            webData = { fetchOk: false, noSSL: !detail.website.startsWith('https'), noSchema: null, noMeta: null, noMobile: null, noCityMention: null, slowSite: null }
+        log('linfo', `\n📍 Location ${locIdx + 1}/${locations.length}: ${loc}`)
+        setPct(Math.round(locPct + locShare * 0.05))
+
+        log('linfo', `→ Geocoding "${loc}"...`)
+        const latlng = await geocode(loc)
+        log('lok', '✓ Location found')
+        setPct(Math.round(locPct + locShare * 0.1))
+
+        log('linfo', `→ Searching for ${actualNiche}s...`)
+        const places = await nearbySearch(latlng, actualNiche, parseInt(maxR))
+        const newPlaces = places.filter(p => !seenPlaceIds.has(p.place_id))
+        newPlaces.forEach(p => seenPlaceIds.add(p.place_id))
+        log('lok', `✓ ${places.length} found, ${newPlaces.length} new (${places.length - newPlaces.length} duplicates skipped)`)
+        setPct(Math.round(locPct + locShare * 0.2))
+        const city = loc.split(',')[0].trim()
+        const currentActiveSigs = new Set(Array.from(activeSigs))
+        const webSigsOn = ['noSchema','noMeta','noMobile','noSSL','noCityMention','slowSite'].some(s => currentActiveSigs.has(s))
+
+        for (let i = 0; i < newPlaces.length; i++) {
+          const basic = newPlaces[i]
+          const overallPct = Math.round(locPct + locShare * (0.2 + 0.75 * (i / Math.max(newPlaces.length, 1))))
+          setPct(overallPct)
+          log('linfo', `  → ${basic.name}`)
+          const detail = await getDetails(basic.place_id)
+          if (!detail) { log('lwarn', '  ⚠ Skipped'); continue }
+          let webData: WebAnalysis | null = null
+          if (detail.website) {
+            if (webSigsOn) {
+              webData = await analyzeWebsite(detail.website, city)
+            } else {
+              webData = { fetchOk: false, noSSL: !detail.website.startsWith('https'), noSchema: null, noMeta: null, noMobile: null, noCityMention: null, slowSite: null }
+            }
           }
+          const lead = scorePlace(detail, newPlaces, currentActiveSigs, webData)
+          log('lok', `  ✓ ${lead.phone || 'no phone'} · score ${lead.score}/10 · ${lead.signals.length} signals`)
+          if (lead.score >= parseInt(minScore)) allScored.push(lead)
         }
+        log('lok', `✓ ${loc}: done`)
+      } // end locations loop
 
-        // Single scoring pass — handles GMB + web + competitive signals
-        const lead = scorePlace(detail, places, currentActiveSigs, webData)
-        const sigSummary = lead.signals.length
-          ? lead.signals.slice(0,3).map((s:string) => SIGNALS[s]?.label || s).join(', ')
-          : 'no weak signals — strong profile'
-        const logCls = lead.score >= parseInt(minScore) ? 'lok' : 'lwarn'
-        log(logCls, `  ${lead.score > 0 ? '✓' : '○'} ${lead.name.slice(0,30)} · score ${lead.score}/10${lead.score > 0 ? ' · ' + sigSummary : ''}`)
-        if (lead.score >= parseInt(minScore)) scored.push(lead)
-      }
-      scored.sort((a, b) => b.score - a.score || b.signals.length - a.signals.length)
-      addLeads(scored)
-      setSavedCount(scored.length)
-      setResults(scored); setFiltered(scored)
-      log('lok', `✓ ${scored.length} prospects found & auto-saved`); setPct(100)
+      allScored.sort((a, b) => b.score - a.score || b.signals.length - a.signals.length)
+      const deduped = allScored.filter((l, i, arr) => arr.findIndex(x => x.placeId === l.placeId) === i)
+      addLeads(deduped)
+      setSavedCount(deduped.length)
+      setResults(deduped); setFiltered(deduped)
+      log('lok', `✓ ${deduped.length} prospects across ${locations.length} location(s) · auto-saved`); setPct(100)
     } catch (e: any) { log('lerr', 'Error: ' + e.message) }
     finally { setRunning(false) }
   }
@@ -267,8 +282,42 @@ export default function ProspectorTab() {
             {niche === 'custom' && <input value={customNiche} onChange={e => setCustomNiche(e.target.value)} placeholder="Enter type" style={{ ...inputStyle, marginTop: 5 }} />}
           </Field>
 
-          <Field label="Location">
-            <input value={loc} onChange={e => setLoc(e.target.value)} placeholder="City, State" style={inputStyle} />
+          <Field label="Locations to scan">
+            <div style={{ display: 'flex', gap: 5 }}>
+              <input
+                value={locInput}
+                onChange={e => setLocInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && locInput.trim()) {
+                    setLocations(prev => prev.includes(locInput.trim()) ? prev : [...prev, locInput.trim()])
+                    setLocInput('')
+                  }
+                }}
+                placeholder="City, State — press Enter to add"
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <button
+                onClick={() => {
+                  if (locInput.trim()) {
+                    setLocations(prev => prev.includes(locInput.trim()) ? prev : [...prev, locInput.trim()])
+                    setLocInput('')
+                  }
+                }}
+                style={{ padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 7, background: '#fff', cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', color: '#374151', flexShrink: 0 }}>
+                Add
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: locations.length > 0 ? 5 : 0 }}>
+              {locations.map((l, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 99, padding: '2px 8px 2px 10px', fontSize: 11, color: '#1d4ed8', fontWeight: 500 }}>
+                  {l}
+                  <button onClick={() => setLocations(prev => prev.filter((_, j) => j !== i))}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#93c5fd', fontSize: 13, lineHeight: 1, padding: '0 0 0 2px' }}>×</button>
+                </div>
+              ))}
+            </div>
+            {locations.length === 0 && <div style={{ fontSize: 10, color: '#f59e0b', marginTop: 3 }}>Add at least one location</div>}
+            {locations.length > 1 && <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 3 }}>Scanning {locations.length} locations · {parseInt(maxR) * locations.length} total max results</div>}
           </Field>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -356,7 +405,7 @@ export default function ProspectorTab() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{results.length} prospects found</div>
-                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{actualNiche}s near {loc} · sorted by opportunity score</div>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{actualNiche}s · {locations.join(', ')} · sorted by opportunity score</div>
               </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
@@ -387,7 +436,7 @@ export default function ProspectorTab() {
             </div>
             <div style={{ fontSize: 14, color: '#6b7280', fontWeight: 500, marginBottom: 5 }}>Ready to find prospects</div>
             <div style={{ fontSize: 12, lineHeight: 1.5 }}>
-              {missingApiKey ? <>Add your Google Maps API key in <strong>Settings</strong> first.</> : <>Pick a niche and location, then click Find &amp; auto-save prospects.</>}
+              {missingApiKey ? <>Add your Google Maps API key in <strong>Settings</strong> first.</> : <>Pick a niche, add locations, then click Find &amp; auto-save prospects.</>}
             </div>
           </div>
         )}
