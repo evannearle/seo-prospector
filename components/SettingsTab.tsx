@@ -23,7 +23,12 @@ export interface AppSettings {
   maxCallDurationSeconds: number
   delayBetweenCallsSeconds: number
   callModel: string
+  voiceProvider: string
   voiceId: string
+  voiceSpeed: number
+  voiceStability: number
+  voiceSimilarityBoost: number
+  voiceOptimizeLatency: number
   aiTemperature: number
 
   // Pitch customization
@@ -67,7 +72,12 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxCallDurationSeconds: 600,
   delayBetweenCallsSeconds: 3,
   callModel: 'gpt-4o-mini',
+  voiceProvider: '11labs',
   voiceId: 'oWAxZDx7w5VEj9dCyTzz',
+  voiceSpeed: 1.1,
+  voiceStability: 0.45,
+  voiceSimilarityBoost: 0.75,
+  voiceOptimizeLatency: 3,
   aiTemperature: 0.7,
   pitchFocus: 'google_maps',
   valueProposition: "We've helped local businesses just like yours go from page 3 to the top 3 on Google Maps — bringing in more calls and jobs without spending a dollar on ads.",
@@ -270,34 +280,94 @@ export default function SettingsTab() {
         </Section>
 
         {/* ── AI Voice Settings ── */}
-        <Section title="AI voice & call behavior" sub="Technical settings for the Vapi call agent">
+        <Section title="AI voice & call behavior" sub="Voice, speed, quality — all adjustable. Changes take effect on the next call.">
+
+          {/* Voice identity */}
           <Row>
-            <Field label="Max call duration (seconds)" hint="Calls auto-end after this. 600 = 10 min.">
-              <input type="number" value={s.maxCallDurationSeconds} onChange={e => set('maxCallDurationSeconds', parseInt(e.target.value))} min={60} max={1800} style={inp} />
-            </Field>
-            <Field label="Delay between calls (seconds)" hint="Pause between each call in a queue run.">
-              <input type="number" value={s.delayBetweenCallsSeconds} onChange={e => set('delayBetweenCallsSeconds', parseInt(e.target.value))} min={1} max={60} style={inp} />
-            </Field>
-          </Row>
-          <Row>
-            <Field label="Call AI model" hint="gpt-4o-mini is fast and cheap. gpt-4o is smarter. Both work with Vapi out of the box.">
-              <select value={s.callModel} onChange={e => set('callModel', e.target.value)} style={selStyle}>
-                <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap — recommended)</option>
-                <option value="gpt-4o">GPT-4o (smarter, costs more)</option>
-                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+            <Field label="Voice provider" hint="ElevenLabs (11labs) has the most natural voices for sales calls.">
+              <select value={s.voiceProvider} onChange={e => set('voiceProvider', e.target.value)} style={selStyle}>
+                <option value="11labs">ElevenLabs (11labs) — recommended</option>
+                <option value="openai">OpenAI</option>
+                <option value="playht">PlayHT</option>
+                <option value="azure">Azure</option>
               </select>
             </Field>
-            <Field label="AI voice (ElevenLabs voice ID)" hint="Layla (oWAxZDx7w5VEj9dCyTzz) is the default. Find more IDs at elevenlabs.io/voice-library.">
-              <input value={s.voiceId} onChange={e => set('voiceId', e.target.value)} style={inp} />
-            </Field>
-            <Field label="AI temperature (0 = consistent, 1 = creative)" hint="0.7 is the sweet spot for natural, confident calls.">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <input type="range" min={0} max={1} step={0.1} value={s.aiTemperature}
-                  onChange={e => set('aiTemperature', parseFloat(e.target.value))} style={{ flex: 1 }} />
-                <span style={{ fontSize: 13, fontWeight: 600, minWidth: 28, textAlign: 'right' }}>{s.aiTemperature}</span>
+            <Field label="Voice ID" hint="ElevenLabs Layla = oWAxZDx7w5VEj9dCyTzz · Find more at elevenlabs.io/voice-library">
+              <input value={s.voiceId} onChange={e => set('voiceId', e.target.value)}
+                placeholder="oWAxZDx7w5VEj9dCyTzz" style={inp} />
+              <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
+                Current: {s.voiceId === 'oWAxZDx7w5VEj9dCyTzz' ? '✓ Layla (ElevenLabs)' : s.voiceId || 'none set'}
               </div>
             </Field>
           </Row>
+
+          {/* Speed & quality sliders */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Slider label="Voice speed" hint="1.0 = normal · 1.1–1.2 = natural fast · 0.9 = slow"
+              min={0.7} max={1.4} step={0.05} value={s.voiceSpeed}
+              onChange={v => set('voiceSpeed', v)}
+              display={`${s.voiceSpeed}x`}
+              markers={[{ v: 0.9, l: 'slow' }, { v: 1.0, l: 'normal' }, { v: 1.15, l: 'natural' }, { v: 1.3, l: 'fast' }]} />
+            <Slider label="Stability" hint="Lower = more expressive/variable · Higher = more consistent"
+              min={0.1} max={1.0} step={0.05} value={s.voiceStability}
+              onChange={v => set('voiceStability', v)}
+              display={`${s.voiceStability}`}
+              markers={[{ v: 0.2, l: 'expressive' }, { v: 0.5, l: 'balanced' }, { v: 0.8, l: 'stable' }]} />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <Slider label="Similarity boost" hint="How closely to match the original voice character"
+              min={0.1} max={1.0} step={0.05} value={s.voiceSimilarityBoost}
+              onChange={v => set('voiceSimilarityBoost', v)}
+              display={`${s.voiceSimilarityBoost}`}
+              markers={[{ v: 0.3, l: 'loose' }, { v: 0.75, l: 'recommended' }, { v: 1.0, l: 'strict' }]} />
+            <Field label="Latency optimization (0–4)" hint="Higher = lower audio delay but slightly lower quality. 3 is the sweet spot for phone calls.">
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[0,1,2,3,4].map(n => (
+                  <button key={n} onClick={() => set('voiceOptimizeLatency', n)}
+                    style={{ flex: 1, padding: '8px 0', border: `1.5px solid ${s.voiceOptimizeLatency === n ? '#18181b' : '#e4e4e0'}`,
+                      borderRadius: 7, background: s.voiceOptimizeLatency === n ? '#18181b' : '#fff',
+                      color: s.voiceOptimizeLatency === n ? '#fff' : '#374151',
+                      fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>0 = best quality · 4 = lowest latency</div>
+            </Field>
+          </div>
+
+          {/* AI model and temp */}
+          <Row>
+            <Field label="Call AI model" hint="Brain of the call. GPT-4o Mini is fast and costs less.">
+              <select value={s.callModel} onChange={e => set('callModel', e.target.value)} style={selStyle}>
+                <option value="gpt-4o-mini">GPT-4o Mini — fast, recommended</option>
+                <option value="gpt-4o">GPT-4o — smarter, costs more</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              </select>
+            </Field>
+            <Slider label="AI temperature" hint="0 = consistent/robotic · 0.7 = natural · 1.0 = creative"
+              min={0} max={1.0} step={0.1} value={s.aiTemperature}
+              onChange={v => set('aiTemperature', v)}
+              display={`${s.aiTemperature}`}
+              markers={[{ v: 0.3, l: 'consistent' }, { v: 0.7, l: 'natural' }, { v: 1.0, l: 'creative' }]} />
+          </Row>
+
+          {/* Call timing */}
+          <Row>
+            <Field label="Max call duration (seconds)" hint="Auto-hangs up after this. 600 = 10 min.">
+              <input type="number" value={s.maxCallDurationSeconds}
+                onChange={e => set('maxCallDurationSeconds', parseInt(e.target.value))} min={60} max={1800} style={inp} />
+            </Field>
+            <Field label="Delay between calls (seconds)" hint="Pause between each call in a queue run.">
+              <input type="number" value={s.delayBetweenCallsSeconds}
+                onChange={e => set('delayBetweenCallsSeconds', parseInt(e.target.value))} min={1} max={60} style={inp} />
+            </Field>
+          </Row>
+
+          <div style={{ background: '#fafaf9', border: '1px solid #f0f0ec', borderRadius: 8, padding: '10px 14px', fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
+            <strong>Recommended for sales calls:</strong> Layla voice · Speed 1.1 · Stability 0.45 · Similarity 0.75 · Latency 3 · GPT-4o Mini · Temp 0.7
+          </div>
         </Section>
 
         {/* ── Retry & Automation ── */}
@@ -405,5 +475,31 @@ export default function SettingsTab() {
         </div>
       </div>
     </div>
+  )
+}
+
+function Slider({ label, hint, min, max, step, value, onChange, display, markers }: {
+  label: string; hint?: string; min: number; max: number; step: number
+  value: number; onChange: (v: number) => void; display: string
+  markers?: { v: number; l: string }[]
+}) {
+  return (
+    <Field label={label} hint={hint}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input type="range" min={min} max={max} step={step} value={value}
+          onChange={e => onChange(parseFloat(e.target.value))} style={{ flex: 1, accentColor: '#18181b' }} />
+        <span style={{ fontSize: 13, fontWeight: 700, minWidth: 38, textAlign: 'right', color: '#18181b' }}>{display}</span>
+      </div>
+      {markers && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+          {markers.map(m => (
+            <button key={m.v} onClick={() => onChange(m.v)}
+              style={{ fontSize: 10, color: Math.abs(value - m.v) < 0.01 ? '#2563eb' : '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: '0 2px', fontWeight: Math.abs(value - m.v) < 0.01 ? 700 : 400 }}>
+              {m.l}
+            </button>
+          ))}
+        </div>
+      )}
+    </Field>
   )
 }

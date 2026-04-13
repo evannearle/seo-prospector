@@ -268,7 +268,12 @@ export async function POST(req: NextRequest) {
       offerLine = "I would love to set up a quick 15-minute call so we can walk through exactly what I found and what it would take to fix it.",
       maxCallDurationSeconds = 600,
       callModel = 'gpt-4o-mini',
-      voiceId = 'oWAxZDx7w5VEj9dCyTzz',  // ElevenLabs Layla
+      voiceProvider = '11labs',
+      voiceId = 'oWAxZDx7w5VEj9dCyTzz',
+      voiceSpeed = 1.1,
+      voiceStability = 0.45,
+      voiceSimilarityBoost = 0.75,
+      voiceOptimizeLatency = 3,
       aiTemperature = 0.7,
     } = config
 
@@ -347,8 +352,12 @@ export async function POST(req: NextRequest) {
           temperature: aiTemperature,
         },
         voice: {
-          provider: '11labs',
+          provider: voiceProvider,
           voiceId,
+          speed: voiceSpeed,
+          stability: voiceStability,
+          similarityBoost: voiceSimilarityBoost,
+          optimizeStreamingLatency: voiceOptimizeLatency,
         },
         recordingEnabled: true,
         silenceTimeoutSeconds: 30,
