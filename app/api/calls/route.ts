@@ -259,6 +259,7 @@ export async function POST(req: NextRequest) {
       customer: {
         number: e164Phone,
         name: bizName,
+        numberE164CheckEnabled: false,
       },
       assistant: {
         firstMessage: `Hi, is the owner or manager around?`,
