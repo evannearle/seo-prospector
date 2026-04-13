@@ -114,7 +114,7 @@ Max call duration: 10 minutes.`
   return [opening, pitch, booking, objections, vmScript, close].join('\n\n')
 }
 
-export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string[]; onQueueChange: (ids: string[]) => void }) {
+export default function PhoneTab({ queueIds, onQueueChange, settings }: { queueIds: string[]; onQueueChange: (ids: string[]) => void; settings?: import('@/components/SettingsTab').AppSettings | null }) {
   const { leads, addCall, updateCall } = useStore()
   const [apiKey, setApiKey]           = useState('')
   const [phoneId, setPhoneId]         = useState('')
@@ -130,6 +130,19 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
   const [showScript, setShowScript]   = useState(false)
   const [previewLead, setPreviewLead] = useState<Lead | null>(null)
   const callingRef = useRef(false)
+
+  // Sync settings into local state when settings change
+  useEffect(() => {
+    if (!settings) return
+    if (settings.vapiApiKey)       setApiKey(settings.vapiApiKey)
+    if (settings.vapiPhoneNumberId) setPhoneId(settings.vapiPhoneNumberId)
+    if (settings.agencyName)       setAgencyName(settings.agencyName)
+    if (settings.callerName)       setCallerName(settings.callerName)
+    if (settings.calendlyEventUrl) setBookingLink(settings.calendlyEventUrl)
+    if (settings.calendlyToken)    setCalendlyToken(settings.calendlyToken)
+    if (settings.callGoal)         setCallGoal(settings.callGoal)
+    if (settings.noAnswerBehavior) setNoAnswer(settings.noAnswerBehavior)
+  }, [settings])
 
   useEffect(() => {
     if (!queueIds.length) return
@@ -173,7 +186,20 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             lead: item.lead,
-            config: { vapiApiKey: apiKey, phoneNumberId: phoneId, agencyName, callerName, bookingLink, calendlyToken, callGoal, noAnswerBehavior: noAnswer }
+            config: {
+              vapiApiKey: apiKey, phoneNumberId: phoneId,
+              agencyName, callerName,
+              callerTitle: settings?.callerTitle || '',
+              callerEmail: settings?.callerEmail || '',
+              bookingLink, calendlyToken,
+              callGoal, noAnswerBehavior: noAnswer,
+              pitchFocus: settings?.pitchFocus || 'google_maps',
+              valueProposition: settings?.valueProposition || '',
+              offerLine: settings?.offerLine || '',
+              maxCallDurationSeconds: settings?.maxCallDurationSeconds || 600,
+              voiceId: settings?.voiceId || 'pNInz6obpgDQGcFmaJgB',
+              aiTemperature: settings?.aiTemperature ?? 0.7,
+            }
           }),
         })
         const data = await resp.json()

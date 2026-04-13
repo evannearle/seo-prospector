@@ -1,6 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useStore } from '@/lib/store'
 import { SIGNALS } from '@/lib/types'
 import type { Lead, WebAnalysis } from '@/lib/types'
@@ -15,7 +15,7 @@ const SIG_GROUPS = [
   { label: 'Competitive signals', color: '#3b82f6', keys: ['outrankedOnReviews','lowEngagement','chainDominates'] },
 ]
 
-export default function ProspectorTab() {
+export default function ProspectorTab({ settings }: { settings?: import('@/components/SettingsTab').AppSettings | null }) {
   const { addLeads } = useStore()
   const [apiKey, setApiKey] = useState('')
   const [niche, setNiche] = useState('plumber')
@@ -36,6 +36,16 @@ export default function ProspectorTab() {
   const svcRef = useRef<any>(null)
   const geoRef = useRef<any>(null)
   const logRef = useRef<HTMLDivElement>(null)
+
+  // Sync settings defaults on mount
+  useEffect(() => {
+    if (!settings) return
+    if (settings.googleMapsApiKey) setApiKey(settings.googleMapsApiKey)
+    if (settings.defaultNiche)     setNiche(settings.defaultNiche)
+    if (settings.defaultLocation)  setLoc(settings.defaultLocation)
+    if (settings.defaultMaxResults) setMaxR(settings.defaultMaxResults)
+    if (settings.defaultMinScore)  setMinScore(settings.defaultMinScore)
+  }, [settings])
 
   const actualNiche = niche === 'custom' ? customNiche : niche
 
