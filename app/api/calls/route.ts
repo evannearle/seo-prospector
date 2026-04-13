@@ -201,14 +201,23 @@ export async function POST(req: NextRequest) {
     const reviews = lead.reviews || 0
     const rating  = lead.rating  || 0
 
-    // Normalize phone to E.164 — Google returns (516) 555-1234, Vapi needs +15165551234
+    // Robust E.164 normalization — handles all Google Maps phone formats
+    function toE164(raw: string): string {
+      if (!raw) return ''
+      // Strip everything except digits and leading +
+      const stripped = raw.trim()
+      // Already E.164
+      if (/^\+1\d{10}$/.test(stripped)) return stripped
+      // Strip all non-digits
+      const digits = stripped.replace(/\D/g, '')
+      if (digits.length === 10) return '+1' + digits          // (516) 555-1234
+      if (digits.length === 11 && digits[0] === '1') return '+' + digits  // 1-516-555-1234
+      if (digits.length > 10) return '+' + digits             // international, best effort
+      return '+1' + digits  // fallback
+    }
     const rawPhone = lead.phone || ''
-    const digits = rawPhone.replace(/\D/g, '')
-    // If 10 digits assume US, prepend +1. If 11 and starts with 1, prepend +. Otherwise use as-is.
-    const e164Phone = digits.length === 10 ? `+1${digits}`
-                    : digits.length === 11 && digits.startsWith('1') ? `+${digits}`
-                    : rawPhone.startsWith('+') ? rawPhone
-                    : `+${digits}`
+    const e164Phone = toE164(rawPhone)
+    console.log('Phone normalization:', JSON.stringify({ rawPhone, e164Phone, leadName: lead.name }))
     const sigs    = (lead.signals || []).map((k: string) => naturalSigLabel(k, { reviews, rating }))
     const sig1    = sigs[0] || 'low Google visibility'
     const sig2    = sigs[1] || 'an incomplete Google profile'
@@ -280,7 +289,7 @@ export async function POST(req: NextRequest) {
     const data = await resp.json()
 
     if (!resp.ok) {
-      console.error('Vapi API error full:', JSON.stringify({ status: resp.status, data, sentBody: { phoneNumberId, e164Phone } }))
+      console.error('Vapi error:', resp.status, 'sent phone:', e164Phone, 'raw:', rawPhone, 'error:', JSON.stringify(data))
       return NextResponse.json({
         error: data.message || `Vapi error ${resp.status}`,
         vapiError: data,
