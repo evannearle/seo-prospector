@@ -11,49 +11,44 @@ export async function startCallRunner(apiKey: string) {
   callState.pauseRequested = false
   notifyCall()
 
-  const waiting = callState.queue.filter(q => q.status === 'queued')
+  await processQueue(apiKey)
 
-  for (const item of waiting) {
-    if (callState.stopRequested) break
+  callState.status = callState.stopRequested ? 'idle' : 'done'
+  runnerActive = false
+  notifyCall()
+}
 
-    while (callState.pauseRequested && !callState.stopRequested) {
-      await sleep(500)
-    }
+async function processQueue(apiKey: string) {
+  // Only pick up items that are queued and past their retryAfter time
+  const getReady = () => callState.queue.filter(q =>
+    q.status === 'queued' &&
+    (!q.retryAfter || new Date(q.retryAfter) <= new Date())
+  )
+
+  let waiting = getReady()
+  while (waiting.length > 0 && !callState.stopRequested) {
+    const item = waiting[0]
+
+    while (callState.pauseRequested && !callState.stopRequested) await sleep(500)
     if (callState.stopRequested) break
 
     updateQueueItem(item.leadId, { status: 'ringing', startedAt: new Date().toISOString() })
 
     try {
-      const raw = getConfig()
-      const config = {
-        vapiApiKey:             raw.vapiApiKey,
-        phoneNumberId:          raw.vapiPhoneNumberId,
-        agencyName:             raw.agencyName,
-        callerName:             raw.callerName,
-        callerTitle:            raw.callerTitle,
-        callerEmail:            raw.callerEmail,
-        bookingLink:            raw.calendlyEventUrl,
-        calendlyToken:          raw.calendlyToken,
-        callGoal:               raw.callGoal,
-        noAnswerBehavior:       raw.noAnswerBehavior,
-        valueProposition:       raw.valueProposition,
-        offerLine:              raw.offerLine,
-        maxCallDurationSeconds: raw.maxCallDurationSeconds || 600,
-        voiceId:                raw.voiceId || 'pNInz6obpgDQGcFmaJgB',
-        aiTemperature:          raw.aiTemperature || 0.7,
-        delayBetweenCallsSeconds: raw.delayBetweenCallsSeconds || 3,
-      }
+      const cfg = buildConfig()
+      if (!cfg.vapiApiKey)    throw new Error('Missing Vapi API key — check Settings')
+      if (!cfg.phoneNumberId) throw new Error('Missing Vapi Phone Number ID — check Settings')
 
       const resp = await fetch('/api/calls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead: item.lead, config }),
+        body: JSON.stringify({ lead: item.lead, config: cfg }),
       })
       const data = await resp.json()
-      if (!resp.ok) throw new Error(data.error || 'Vapi error')
+      if (!resp.ok) throw new Error(data.error || `Vapi error ${resp.status}`)
 
       const callId = data.id || data.callId || data.call_id
-      updateQueueItem(item.leadId, { status: 'in-progress', callId, startedAt: new Date().toISOString() })
+      updateQueueItem(item.leadId, { status: 'in-progress', callId })
 
       if (callId) await pollCall(callId, item.leadId, apiKey)
     } catch (e: unknown) {
@@ -61,18 +56,18 @@ export async function startCallRunner(apiKey: string) {
       updateQueueItem(item.leadId, { status: 'failed', outcome: 'no-answer', error: msg })
     }
 
-    const delaySecs = getConfig().delayBetweenCallsSeconds || 3
+    // Auto-push booked leads to CRM
+    const completed = callState.queue.find(q => q.leadId === item.leadId)
+    if (completed?.outcome === 'booked' && !completed.crmPushed) {
+      await pushToCRM(completed)
+    }
+
+    const delaySecs = buildConfig().delayBetweenCallsSeconds || 3
     if (!callState.stopRequested) await sleep(delaySecs * 1000)
+
+    waiting = getReady()
   }
-
-  callState.status = callState.stopRequested ? 'idle' : 'done'
-  runnerActive = false
-  notifyCall()
 }
-
-export function pauseCallRunner()  { callState.pauseRequested = true;  callState.status = 'paused';  notifyCall() }
-export function resumeCallRunner() { callState.pauseRequested = false; callState.status = 'running'; notifyCall() }
-export function stopCallRunner()   { callState.stopRequested = true; callState.pauseRequested = false; callState.status = 'idle'; runnerActive = false; notifyCall() }
 
 async function pollCall(callId: string, leadId: string, apiKey: string) {
   const maxWait = 3 * 60 * 1000
@@ -104,6 +99,60 @@ async function pollCall(callId: string, leadId: string, apiKey: string) {
   }
 }
 
+async function pushToCRM(item: typeof callState.queue[0]) {
+  const cfg = buildConfig()
+  const webhookUrl = cfg.crmWebhookUrl
+  if (!webhookUrl) return
+  try {
+    await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event:       'call.booked',
+        timestamp:   new Date().toISOString(),
+        lead: {
+          name:     item.lead.name,
+          phone:    item.lead.phone,
+          address:  item.lead.addr,
+          website:  item.lead.website,
+          niche:    item.lead.niche,
+          score:    item.lead.score,
+          signals:  item.lead.signals,
+          mapsUrl:  item.lead.mapsUrl,
+        },
+        call: {
+          id:          item.callId,
+          outcome:     item.outcome,
+          duration:    item.duration,
+          startedAt:   item.startedAt,
+          endedAt:     item.endedAt,
+          recordingUrl: item.recordingUrl,
+          retryCount:  item.retryCount || 0,
+        },
+      }),
+    })
+    updateQueueItem(item.leadId, { crmPushed: true })
+  } catch (e) {
+    console.error('CRM push failed:', e)
+  }
+}
+
+export function pauseCallRunner()  { callState.pauseRequested = true;  callState.status = 'paused';  notifyCall() }
+export function resumeCallRunner() { callState.pauseRequested = false; callState.status = 'running'; notifyCall() }
+export function stopCallRunner()   { callState.stopRequested = true; callState.pauseRequested = false; callState.status = 'idle'; runnerActive = false; notifyCall() }
+
+export async function retryNoAnswers() {
+  const { requeueNoAnswer } = await import('./globalState')
+  const cfg = buildConfig()
+  const delayMins = cfg.retryDelayMinutes || 60
+  const count = requeueNoAnswer(delayMins)
+  if (count > 0) {
+    const apiKey = cfg.vapiApiKey
+    if (apiKey) startCallRunner(apiKey)
+  }
+  return count
+}
+
 function inferOutcome(text: string) {
   const t = text.toLowerCase()
   if (t.includes('book') || t.includes('schedule') || t.includes('calendly')) return 'booked' as const
@@ -114,11 +163,30 @@ function inferOutcome(text: string) {
   return 'no-answer' as const
 }
 
-function getConfig(): Record<string, any> {
+function buildConfig(): Record<string, any> {
   if (typeof window === 'undefined') return {}
   try {
-    const raw = localStorage.getItem('seo_prospector_settings_v1')
-    return raw ? JSON.parse(raw) : {}
+    const raw = JSON.parse(localStorage.getItem('seo_prospector_settings_v1') || '{}')
+    return {
+      vapiApiKey:              raw.vapiApiKey,
+      phoneNumberId:           raw.vapiPhoneNumberId,
+      agencyName:              raw.agencyName,
+      callerName:              raw.callerName,
+      callerTitle:             raw.callerTitle,
+      callerEmail:             raw.callerEmail,
+      bookingLink:             raw.calendlyEventUrl,
+      calendlyToken:           raw.calendlyToken,
+      callGoal:                raw.callGoal,
+      noAnswerBehavior:        raw.noAnswerBehavior,
+      valueProposition:        raw.valueProposition,
+      offerLine:               raw.offerLine,
+      maxCallDurationSeconds:  raw.maxCallDurationSeconds || 600,
+      voiceId:                 raw.voiceId || 'pNInz6obpgDQGcFmaJgB',
+      aiTemperature:           raw.aiTemperature || 0.7,
+      delayBetweenCallsSeconds: raw.delayBetweenCallsSeconds || 3,
+      retryDelayMinutes:       raw.retryDelayMinutes || 60,
+      crmWebhookUrl:           raw.crmWebhookUrl || '',
+    }
   } catch { return {} }
 }
 

@@ -30,6 +30,14 @@ export interface AppSettings {
   valueProposition: string
   offerLine: string
 
+  // Retries + automation
+  retryDelayMinutes: number
+  maxRetries: number
+
+  // CRM / webhook
+  crmWebhookUrl: string
+  crmPushOnBooked: boolean
+
   // Prospector defaults
   defaultNiche: string
   defaultLocation: string
@@ -57,6 +65,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   pitchFocus: 'google_maps',
   valueProposition: "We've helped local businesses just like yours go from page 3 to the top 3 on Google Maps — bringing in more calls and jobs without spending a dollar on ads.",
   offerLine: "I'd love to set up a quick 15-minute intro call with one of our SEO specialists. They'll walk through exactly what we found and what it would take to fix it.",
+  retryDelayMinutes: 60,
+  maxRetries: 3,
+  crmWebhookUrl: '',
+  crmPushOnBooked: true,
   defaultNiche: 'plumber',
   defaultLocation: 'Farmingdale, NY',
   defaultMaxResults: '40',
@@ -271,8 +283,43 @@ export default function SettingsTab() {
           </Row>
         </Section>
 
+        {/* ── Retry & Automation ── */}
+        <Section title="Retry & automation" sub="Automatically retry no-answer calls and schedule runs">
+          <Row>
+            <Field label="Retry delay (minutes)" hint="How long to wait before retrying a no-answer call">
+              <input type="number" value={s.retryDelayMinutes} onChange={e => set('retryDelayMinutes', parseInt(e.target.value))} min={15} max={1440} style={inp} />
+            </Field>
+            <Field label="Max retries per lead" hint="Stop retrying after this many no-answer attempts">
+              <input type="number" value={s.maxRetries} onChange={e => set('maxRetries', parseInt(e.target.value))} min={1} max={10} style={inp} />
+            </Field>
+          </Row>
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '11px 14px', fontSize: 12, color: '#1d4ed8', lineHeight: 1.65 }}>
+            <strong>How retries work:</strong> After a call run completes, click "Retry no-answers" in the AI Phone tab to requeue all no-answer and voicemail results. Leads are only retried up to the max you set here, then marked as exhausted.
+          </div>
+        </Section>
+
+        {/* ── CRM / Webhook ── */}
+        <Section title="CRM & webhook push" sub="Auto-send booked leads to your CRM or any webhook endpoint">
+          <Field label="Webhook URL" hint="Paste your GHL, Zapier, Make, or custom endpoint. Called immediately when a call is marked Booked.">
+            <input value={s.crmWebhookUrl} onChange={e => set('crmWebhookUrl', e.target.value)} placeholder="https://hooks.zapier.com/..." style={inp} />
+          </Field>
+          <Field label="Auto-push on booked">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+              <input type="checkbox" checked={s.crmPushOnBooked} onChange={e => set('crmPushOnBooked', e.target.checked as any)} style={{ accentColor: '#2563eb', cursor: 'pointer' }} />
+              Automatically push lead + call data to webhook when outcome is "Booked"
+            </label>
+          </Field>
+          {s.crmWebhookUrl && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '11px 14px', fontSize: 12, color: '#166534', lineHeight: 1.65 }}>
+              <strong>Payload sent on booking:</strong><br />
+              <code style={{ fontSize: 11, fontFamily: 'monospace' }}>{"{ event: 'call.booked', lead: { name, phone, address, website, niche, score, signals }, call: { outcome, duration, recordingUrl, retryCount } }"}</code>
+            </div>
+          )}
+        </Section>
+
         {/* ── Prospector Defaults ── */}
-        <Section title="Prospector defaults" sub="Pre-fills the search form when you open the app">
+        <Section title="Prospector defaults"
+ sub="Pre-fills the search form when you open the app">
           <Row>
             <Field label="Default niche">
               <select value={s.defaultNiche} onChange={e => set('defaultNiche', e.target.value)} style={selStyle}>

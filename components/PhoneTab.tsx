@@ -5,7 +5,7 @@ import { useStore } from '@/lib/store'
 import { SIGNALS } from '@/lib/types'
 import { loadSettings } from '@/components/SettingsTab'
 import { callState, addToCallQueue, notifyCall } from '@/lib/globalState'
-import { startCallRunner, pauseCallRunner, resumeCallRunner, stopCallRunner } from '@/lib/callRunner'
+import { startCallRunner, pauseCallRunner, resumeCallRunner, stopCallRunner, retryNoAnswers } from '@/lib/callRunner'
 import type { GlobalQueueItem } from '@/lib/globalState'
 import type { Lead, TranscriptLine } from '@/lib/types'
 
@@ -151,6 +151,7 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
   const [callStatus, setCallStatus] = useState(callState.status)
   const [queue, setQueue]           = useState<GlobalQueueItem[]>([...callState.queue])
   const [selectedCall, setSelectedCall] = useState<GlobalQueueItem | null>(null)
+  const [retrying, setRetrying] = useState(false)
   const [showScript, setShowScript] = useState(false)
   const [previewLead, setPreviewLead] = useState<Lead | null>(null)
 
@@ -208,6 +209,13 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
     if (!s.vapiPhoneNumberId) { alert('Add your Vapi Phone Number ID in Settings first.'); return }
     if (!callState.queue.filter(q => q.status === 'queued').length) { alert('No leads waiting in queue.'); return }
     startCallRunner(s.vapiApiKey)
+  }
+
+  const handleRetry = async () => {
+    setRetrying(true)
+    const count = await retryNoAnswers()
+    setRetrying(false)
+    if (count === 0) alert('No no-answer or voicemail calls to retry. All leads have either been reached or hit their retry limit.')
   }
 
   const running = callStatus === 'running'
@@ -333,6 +341,11 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
                 </div>
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                   <button onClick={clearQueue} disabled={busy} style={{ ...btnSt, opacity: busy ? .5 : 1 }}>Clear</button>
+                  <button onClick={handleRetry} disabled={busy || retrying}
+                    style={{ ...btnSt, opacity: busy || retrying ? .5 : 1 }}
+                    title="Requeue no-answer and voicemail calls for retry">
+                    {retrying ? 'Requeueing...' : '↻ Retry no-answers'}
+                  </button>
                   {!busy && <button onClick={handleStart} disabled={!waiting || missingConfig}
                     style={{ ...btnSt, background: '#16a34a', color: '#fff', border: 'none', opacity: waiting && !missingConfig ? 1 : .4 }}>
                     ▶ Start calling
@@ -389,6 +402,8 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
                         <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, ...(oi||sti) }}>{oi ? oi.label : sti.label}</span>
                         {item.duration && <span style={{ fontSize: 9, color: '#9ca3af' }}>{Math.floor(item.duration/60)}:{String(item.duration%60).padStart(2,'0')}</span>}
                         {item.recordingUrl && <span style={{ fontSize: 9, color: '#2563eb' }}>🎙 Recording</span>}
+                        {item.crmPushed && <span style={{ fontSize: 9, color: '#16a34a' }}>✓ CRM</span>}
+                        {(item.retryCount || 0) > 0 && <span style={{ fontSize: 9, color: '#9ca3af' }}>retry {item.retryCount}</span>}
                       </div>
                       {item.status === 'queued' && (
                         <button onClick={e => { e.stopPropagation(); removeFromQ(item.leadId) }}

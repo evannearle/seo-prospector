@@ -3,14 +3,15 @@ import { useState } from 'react'
 import { useStore } from '@/lib/store'
 import dynamic from 'next/dynamic'
 
-const ProspectorTab = dynamic(() => import('@/components/ProspectorTab'), { ssr: false })
-const LeadsTab      = dynamic(() => import('@/components/LeadsTab'),      { ssr: false })
-const PhoneTab      = dynamic(() => import('@/components/PhoneTab'),      { ssr: false })
-const AnalyticsTab  = dynamic(() => import('@/components/AnalyticsTab'),  { ssr: false })
-const SettingsTab   = dynamic(() => import('@/components/SettingsTab'),   { ssr: false })
-const StatusBar     = dynamic(() => import('@/components/StatusBar'),     { ssr: false })
+const ProspectorTab  = dynamic(() => import('@/components/ProspectorTab'),  { ssr: false })
+const LeadsTab       = dynamic(() => import('@/components/LeadsTab'),        { ssr: false })
+const PhoneTab       = dynamic(() => import('@/components/PhoneTab'),        { ssr: false })
+const AnalyticsTab   = dynamic(() => import('@/components/AnalyticsTab'),    { ssr: false })
+const SchedulerTab   = dynamic(() => import('@/components/SchedulerTab'),    { ssr: false })
+const SettingsTab    = dynamic(() => import('@/components/SettingsTab'),     { ssr: false })
+const StatusBar      = dynamic(() => import('@/components/StatusBar'),       { ssr: false })
 
-type TabId = 'prospector' | 'leads' | 'phone' | 'analytics' | 'settings'
+type TabId = 'prospector' | 'leads' | 'phone' | 'analytics' | 'scheduler' | 'settings'
 
 export default function Home() {
   const [active, setActive]         = useState<TabId>('prospector')
@@ -22,11 +23,12 @@ export default function Home() {
     { id: 'leads',      label: 'Saved Leads',     count: leads.length,      color: '#16a34a' },
     { id: 'phone',      label: 'AI Phone System',  count: phoneQueue.length, color: '#2563eb' },
     { id: 'analytics',  label: 'Analytics' },
+    { id: 'scheduler',  label: 'Automation' },
     { id: 'settings',   label: 'Settings' },
   ]
 
   const tabStyle = (id: TabId): React.CSSProperties => ({
-    display: 'flex', alignItems: 'center', gap: 7, padding: '12px 18px',
+    display: 'flex', alignItems: 'center', gap: 7, padding: '12px 16px',
     fontSize: 12, fontWeight: 600,
     color: active === id ? '#18181b' : '#9ca3af',
     borderTop: 'none', borderLeft: 'none', borderRight: 'none',
@@ -36,9 +38,8 @@ export default function Home() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f6f6f4' }}>
-
       {/* Tab bar */}
-      <div style={{ display: 'flex', alignItems: 'stretch', background: '#fff', borderBottom: '1px solid #e4e4e0', padding: '0 20px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', background: '#fff', borderBottom: '1px solid #e4e4e0', padding: '0 16px', flexShrink: 0 }}>
         {tabs.map(({ id, label, count, color }) => (
           <button key={id} onClick={() => setActive(id)} style={tabStyle(id)}>
             {label}
@@ -51,7 +52,7 @@ export default function Home() {
         ))}
       </div>
 
-      {/* Global status bar — shows scan/call activity from any tab */}
+      {/* Global status bar */}
       <StatusBar />
 
       {/* Panels */}
@@ -60,6 +61,7 @@ export default function Home() {
         {active === 'leads'      && <div style={{ display: 'flex', height: '100%' }}><LeadsTab onSendToPhone={ids => { setPhoneQueue(q => Array.from(new Set([...q, ...ids]))); setActive('phone') }} /></div>}
         {active === 'phone'      && <div style={{ display: 'flex', height: '100%' }}><PhoneTab queueIds={phoneQueue} onQueueChange={setPhoneQueue} /></div>}
         {active === 'analytics'  && <div style={{ display: 'flex', height: '100%' }}><AnalyticsTab /></div>}
+        {active === 'scheduler'  && <div style={{ display: 'flex', height: '100%' }}><SchedulerTab /></div>}
         {active === 'settings'   && <div style={{ display: 'flex', height: '100%' }}><SettingsTab /></div>}
       </div>
     </div>
