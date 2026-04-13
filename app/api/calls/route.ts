@@ -234,12 +234,13 @@ export async function POST(req: NextRequest) {
       maxDurationSeconds: maxCallDurationSeconds,
     })
 
-    console.log('Dispatching Vapi call:', {
-      phoneNumberId,
-      toNumber: lead.phone,
+    console.log('Dispatching Vapi call:', JSON.stringify({
+      phoneNumberId: phoneNumberId?.slice(0, 8) + '...',
+      rawPhone: lead.phone,
+      e164Phone,
       bizName,
       vapiKeyPrefix: vapiApiKey.slice(0, 8) + '...',
-    })
+    }))
 
     // Vapi transient assistant — inline assistant object per official docs
     // Endpoint: /call (not /call/phone)
@@ -279,7 +280,7 @@ export async function POST(req: NextRequest) {
     const data = await resp.json()
 
     if (!resp.ok) {
-      console.error('Vapi API error:', resp.status, JSON.stringify(data))
+      console.error('Vapi API error full:', JSON.stringify({ status: resp.status, data, sentBody: { phoneNumberId, e164Phone } }))
       return NextResponse.json({
         error: data.message || `Vapi error ${resp.status}`,
         vapiError: data,
