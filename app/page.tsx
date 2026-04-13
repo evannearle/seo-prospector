@@ -9,19 +9,22 @@ const PhoneTab       = dynamic(() => import('@/components/PhoneTab'),        { s
 const AnalyticsTab   = dynamic(() => import('@/components/AnalyticsTab'),    { ssr: false })
 const SchedulerTab   = dynamic(() => import('@/components/SchedulerTab'),    { ssr: false })
 const SettingsTab    = dynamic(() => import('@/components/SettingsTab'),     { ssr: false })
+const CallHistoryTab = dynamic(() => import('@/components/CallHistoryTab'), { ssr: false })
 const StatusBar      = dynamic(() => import('@/components/StatusBar'),       { ssr: false })
 
-type TabId = 'prospector' | 'leads' | 'phone' | 'analytics' | 'scheduler' | 'settings'
+type TabId = 'prospector' | 'leads' | 'phone' | 'history' | 'analytics' | 'scheduler' | 'settings'
 
 export default function Home() {
   const [active, setActive]         = useState<TabId>('prospector')
   const [phoneQueue, setPhoneQueue] = useState<string[]>([])
   const leads = useStore(s => s.leads)
+  const callCount = useStore(s => s.calls.length)
 
   const tabs: { id: TabId; label: string; count?: number; color?: string }[] = [
     { id: 'prospector', label: 'Prospector' },
     { id: 'leads',      label: 'Saved Leads',     count: leads.length,      color: '#16a34a' },
     { id: 'phone',      label: 'AI Phone System',  count: phoneQueue.length, color: '#2563eb' },
+    { id: 'history',    label: 'Call History', count: callCount, color: '#7c3aed' },
     { id: 'analytics',  label: 'Analytics' },
     { id: 'scheduler',  label: 'Automation' },
     { id: 'settings',   label: 'Settings' },
@@ -60,6 +63,7 @@ export default function Home() {
         {active === 'prospector' && <div style={{ display: 'flex', height: '100%' }}><ProspectorTab /></div>}
         {active === 'leads'      && <div style={{ display: 'flex', height: '100%' }}><LeadsTab onSendToPhone={ids => { setPhoneQueue(q => Array.from(new Set([...q, ...ids]))); setActive('phone') }} /></div>}
         {active === 'phone'      && <div style={{ display: 'flex', height: '100%' }}><PhoneTab queueIds={phoneQueue} onQueueChange={setPhoneQueue} /></div>}
+        {active === 'history'    && <div style={{ display: 'flex', height: '100%' }}><CallHistoryTab /></div>}
         {active === 'analytics'  && <div style={{ display: 'flex', height: '100%' }}><AnalyticsTab /></div>}
         {active === 'scheduler'  && <div style={{ display: 'flex', height: '100%' }}><SchedulerTab /></div>}
         {active === 'settings'   && <div style={{ display: 'flex', height: '100%' }}><SettingsTab /></div>}
