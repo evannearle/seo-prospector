@@ -56,10 +56,13 @@ async function processQueue(apiKey: string) {
       updateQueueItem(item.leadId, { status: 'failed', outcome: 'no-answer', error: msg })
     }
 
-    // Auto-push booked leads to CRM
+    // Auto-push booked leads to CRM + email alert
     const completed = callState.queue.find(q => q.leadId === item.leadId)
-    if (completed?.outcome === 'booked' && !completed.crmPushed) {
-      await pushToCRM(completed)
+    if (completed?.outcome === 'booked') {
+      const pushPromises: Promise<void>[] = []
+      if (!completed.crmPushed) pushPromises.push(pushToCRM(completed))
+      pushPromises.push(sendEmailAlert(completed))
+      await Promise.allSettled(pushPromises)
     }
 
     const delaySecs = buildConfig().delayBetweenCallsSeconds || 3
@@ -186,8 +189,51 @@ function buildConfig(): Record<string, any> {
       delayBetweenCallsSeconds: raw.delayBetweenCallsSeconds || 3,
       retryDelayMinutes:       raw.retryDelayMinutes || 60,
       crmWebhookUrl:           raw.crmWebhookUrl || '',
+      alertEmail:              raw.alertEmail || '',
+      resendApiKey:            raw.resendApiKey || '',
+      emailAlertsEnabled:      raw.emailAlertsEnabled !== false,
     }
   } catch { return {} }
+}
+
+async function sendEmailAlert(item: typeof callState.queue[0]) {
+  const cfg = buildConfig()
+  if (!cfg.emailAlertsEnabled || !cfg.alertEmail || !cfg.resendApiKey) return
+  try {
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lead: {
+          name:     item.lead.name,
+          phone:    item.lead.phone,
+          addr:     item.lead.addr,
+          website:  item.lead.website,
+          niche:    item.lead.niche,
+          score:    item.lead.score,
+          signals:  item.lead.signals,
+          mapsUrl:  item.lead.mapsUrl,
+        },
+        call: {
+          callId:      item.callId,
+          outcome:     item.outcome,
+          duration:    item.duration,
+          recordingUrl: item.recordingUrl,
+          transcript:  item.transcript || [],
+          retryCount:  item.retryCount || 0,
+        },
+        config: {
+          alertEmail:   cfg.alertEmail,
+          resendApiKey: cfg.resendApiKey,
+          agencyName:   cfg.agencyName || 'SEO Prospector',
+          callerName:   cfg.callerName || 'AI Caller',
+          emailAlertsEnabled: cfg.emailAlertsEnabled,
+        },
+      }),
+    })
+  } catch (e) {
+    console.error('Email alert failed:', e)
+  }
 }
 
 function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)) }

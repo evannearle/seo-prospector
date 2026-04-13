@@ -34,6 +34,11 @@ export interface AppSettings {
   retryDelayMinutes: number
   maxRetries: number
 
+  // Email alerts
+  alertEmail: string
+  resendApiKey: string
+  emailAlertsEnabled: boolean
+
   // CRM / webhook
   crmWebhookUrl: string
   crmPushOnBooked: boolean
@@ -67,6 +72,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   offerLine: "I'd love to set up a quick 15-minute intro call with one of our SEO specialists. They'll walk through exactly what we found and what it would take to fix it.",
   retryDelayMinutes: 60,
   maxRetries: 3,
+  alertEmail: '',
+  resendApiKey: '',
+  emailAlertsEnabled: true,
   crmWebhookUrl: '',
   crmPushOnBooked: true,
   defaultNiche: 'plumber',
@@ -296,6 +304,33 @@ export default function SettingsTab() {
           <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '11px 14px', fontSize: 12, color: '#1d4ed8', lineHeight: 1.65 }}>
             <strong>How retries work:</strong> After a call run completes, click "Retry no-answers" in the AI Phone tab to requeue all no-answer and voicemail results. Leads are only retried up to the max you set here, then marked as exhausted.
           </div>
+        </Section>
+
+        {/* ── Email alerts ── */}
+        <Section title="Booking alert emails" sub="Get an email every time a call is booked — includes prospect info, transcript, and recording link">
+          <Field label="Enable booking alerts">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+              <input type="checkbox" checked={s.emailAlertsEnabled} onChange={e => set('emailAlertsEnabled', e.target.checked as any)} style={{ accentColor: '#2563eb', cursor: 'pointer' }} />
+              Send an email alert every time a call outcome is "Booked"
+            </label>
+          </Field>
+          <Row>
+            <Field label="Alert email address" hint="Where to send booking notifications">
+              <input value={s.alertEmail} onChange={e => set('alertEmail', e.target.value)} placeholder="evan@genesee.info" style={inp} />
+            </Field>
+            <KeyField label="Resend API Key" field="resendApiKey" placeholder="re_..."
+              hint="Free at resend.com — 3,000 emails/month. Create API key at resend.com/api-keys" />
+          </Row>
+          {s.emailAlertsEnabled && s.alertEmail && s.resendApiKey && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '11px 14px', fontSize: 12, color: '#166534', lineHeight: 1.65 }}>
+              ✓ Alerts active — every booking sends to <strong>{s.alertEmail}</strong> with prospect info, call duration, SEO issues pitched, and transcript preview.
+            </div>
+          )}
+          {s.emailAlertsEnabled && (!s.alertEmail || !s.resendApiKey) && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '11px 14px', fontSize: 12, color: '#92400e', lineHeight: 1.65 }}>
+              ⚠ Enter your alert email and Resend API key above to enable alerts. Get a free Resend key at <a href="https://resend.com/api-keys" target="_blank" style={{ color: '#92400e' }}>resend.com/api-keys</a>.
+            </div>
+          )}
         </Section>
 
         {/* ── CRM / Webhook ── */}
