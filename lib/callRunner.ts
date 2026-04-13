@@ -86,8 +86,10 @@ async function processQueue(apiKey: string) {
       if (!resp.ok) throw new Error(data.error || `Vapi error ${resp.status}: ${data.hint || ''}`)
 
       const callId = data.id || data.callId || data.call_id
+      const listenUrl  = data.monitor?.listenUrl  || null
+      const controlUrl = data.monitor?.controlUrl || null
       callRecord.vapiCallId = callId
-      updateQueueItem(item.leadId, { status: 'in-progress', callId })
+      updateQueueItem(item.leadId, { status: 'in-progress', callId, listenUrl, controlUrl })
 
       // Persist initial record immediately
       persistCall(callRecord)

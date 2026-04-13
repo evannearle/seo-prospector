@@ -35,9 +35,11 @@ export interface GlobalQueueItem {
   recordingUrl?: string
   transcript?:  TranscriptLine[]
   error?:       string
-  retryCount?:  number   // how many times we've retried
-  retryAfter?:  string   // ISO timestamp — don't retry before this
-  crmPushed?:   boolean  // has this been sent to CRM
+  retryCount?:  number
+  retryAfter?:  string
+  crmPushed?:   boolean
+  listenUrl?:   string | null   // Vapi WebSocket audio stream URL
+  controlUrl?:  string | null   // Vapi control endpoint
 }
 
 export const callState = {

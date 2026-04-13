@@ -7,6 +7,7 @@ import { loadSettings } from '@/components/SettingsTab'
 import { callState, addToCallQueue, notifyCall } from '@/lib/globalState'
 import { startCallRunner, pauseCallRunner, resumeCallRunner, stopCallRunner, retryNoAnswers } from '@/lib/callRunner'
 import type { GlobalQueueItem } from '@/lib/globalState'
+import LiveCallMonitor from '@/components/LiveCallMonitor'
 import type { Lead, TranscriptLine } from '@/lib/types'
 
 // ── Script preview ────────────────────────────────────────────────────────────
@@ -153,6 +154,7 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
   const [selectedCall, setSelectedCall] = useState<GlobalQueueItem | null>(null)
   const [retrying, setRetrying] = useState(false)
   const [testResult, setTestResult] = useState<{ok: boolean; msg: string; detail?: string} | null>(null)
+  const [monitorItem, setMonitorItem] = useState<GlobalQueueItem | null>(null)
   const [showScript, setShowScript] = useState(false)
   const [previewLead, setPreviewLead] = useState<Lead | null>(null)
 
@@ -442,7 +444,7 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
                   const initials = item.lead.name.split(' ').map((w: string) => w[0]).slice(0,2).join('').toUpperCase()
                   return (
                     <div key={item.leadId}
-                      onClick={() => setSelectedCall(selectedCall?.leadId === item.leadId ? null : item)}
+                      onClick={() => setMonitorItem(item)}
                       style={{ background: '#fff', border: `1px solid ${active ? '#93c5fd' : item.status === 'completed' ? '#86efac' : item.status === 'failed' ? '#fca5a5' : '#e4e4e0'}`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer' }}>
                       <div style={{ width: 32, height: 32, borderRadius: 7, background: active ? '#dbeafe' : '#f4f4f2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: active ? '#1e3a8a' : '#9ca3af', flexShrink: 0 }}>
                         {active ? <WaveIcon /> : initials}
@@ -460,6 +462,8 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
                         {item.crmPushed && <span style={{ fontSize: 9, color: '#16a34a' }}>✓ CRM</span>}
                         {(item.retryCount || 0) > 0 && <span style={{ fontSize: 9, color: '#9ca3af' }}>retry {item.retryCount}</span>}
                         {item.error && <span style={{ fontSize: 9, color: '#dc2626', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginTop: 2 }} title={item.error}>⚠ {item.error}</span>}
+                        {['ringing','in-progress'].includes(item.status) && <span style={{ fontSize: 9, fontWeight: 700, color: '#dc2626' }}>● LIVE</span>}
+                        <span style={{ fontSize: 9, color: '#9ca3af' }}>click to monitor</span>
                       </div>
                       {item.status === 'queued' && (
                         <button onClick={e => { e.stopPropagation(); removeFromQ(item.leadId) }}
@@ -543,6 +547,14 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
           </div>
         )}
       </div>
+
+      {/* Live call monitor modal */}
+      {monitorItem && (
+        <LiveCallMonitor
+          item={callState.queue.find(q => q.leadId === monitorItem.leadId) || monitorItem}
+          onClose={() => setMonitorItem(null)}
+        />
+      )}
     </div>
   )
 }
