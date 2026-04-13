@@ -8,6 +8,7 @@ const LeadsTab      = dynamic(() => import('@/components/LeadsTab'),      { ssr:
 const PhoneTab      = dynamic(() => import('@/components/PhoneTab'),      { ssr: false })
 const AnalyticsTab  = dynamic(() => import('@/components/AnalyticsTab'),  { ssr: false })
 const SettingsTab   = dynamic(() => import('@/components/SettingsTab'),   { ssr: false })
+const StatusBar     = dynamic(() => import('@/components/StatusBar'),     { ssr: false })
 
 type TabId = 'prospector' | 'leads' | 'phone' | 'analytics' | 'settings'
 
@@ -19,7 +20,7 @@ export default function Home() {
   const tabs: { id: TabId; label: string; count?: number; color?: string }[] = [
     { id: 'prospector', label: 'Prospector' },
     { id: 'leads',      label: 'Saved Leads',     count: leads.length,      color: '#16a34a' },
-    { id: 'phone',      label: 'AI Phone System', count: phoneQueue.length, color: '#2563eb' },
+    { id: 'phone',      label: 'AI Phone System',  count: phoneQueue.length, color: '#2563eb' },
     { id: 'analytics',  label: 'Analytics' },
     { id: 'settings',   label: 'Settings' },
   ]
@@ -35,6 +36,7 @@ export default function Home() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: '#f6f6f4' }}>
+
       {/* Tab bar */}
       <div style={{ display: 'flex', alignItems: 'stretch', background: '#fff', borderBottom: '1px solid #e4e4e0', padding: '0 20px', flexShrink: 0 }}>
         {tabs.map(({ id, label, count, color }) => (
@@ -48,6 +50,9 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Global status bar — shows scan/call activity from any tab */}
+      <StatusBar />
 
       {/* Panels */}
       <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>

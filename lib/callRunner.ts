@@ -1,8 +1,5 @@
 // Background call runner — lives outside React, survives tab switches
-// Called from PhoneTab, continues even when user navigates away
-
 import { callState, updateQueueItem, notifyCall } from './globalState'
-import type { GlobalQueueItem } from './globalState'
 
 let runnerActive = false
 
@@ -19,7 +16,6 @@ export async function startCallRunner(apiKey: string) {
   for (const item of waiting) {
     if (callState.stopRequested) break
 
-    // Pause loop
     while (callState.pauseRequested && !callState.stopRequested) {
       await sleep(500)
     }
@@ -28,10 +24,30 @@ export async function startCallRunner(apiKey: string) {
     updateQueueItem(item.leadId, { status: 'ringing', startedAt: new Date().toISOString() })
 
     try {
+      const raw = getConfig()
+      const config = {
+        vapiApiKey:             raw.vapiApiKey,
+        phoneNumberId:          raw.vapiPhoneNumberId,
+        agencyName:             raw.agencyName,
+        callerName:             raw.callerName,
+        callerTitle:            raw.callerTitle,
+        callerEmail:            raw.callerEmail,
+        bookingLink:            raw.calendlyEventUrl,
+        calendlyToken:          raw.calendlyToken,
+        callGoal:               raw.callGoal,
+        noAnswerBehavior:       raw.noAnswerBehavior,
+        valueProposition:       raw.valueProposition,
+        offerLine:              raw.offerLine,
+        maxCallDurationSeconds: raw.maxCallDurationSeconds || 600,
+        voiceId:                raw.voiceId || 'pNInz6obpgDQGcFmaJgB',
+        aiTemperature:          raw.aiTemperature || 0.7,
+        delayBetweenCallsSeconds: raw.delayBetweenCallsSeconds || 3,
+      }
+
       const resp = await fetch('/api/calls', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lead: item.lead, config: getConfig() }),
+        body: JSON.stringify({ lead: item.lead, config }),
       })
       const data = await resp.json()
       if (!resp.ok) throw new Error(data.error || 'Vapi error')
@@ -39,14 +55,12 @@ export async function startCallRunner(apiKey: string) {
       const callId = data.id || data.callId || data.call_id
       updateQueueItem(item.leadId, { status: 'in-progress', callId, startedAt: new Date().toISOString() })
 
-      // Poll for completion
       if (callId) await pollCall(callId, item.leadId, apiKey)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Unknown error'
       updateQueueItem(item.leadId, { status: 'failed', outcome: 'no-answer', error: msg })
     }
 
-    // Delay between calls
     const delaySecs = getConfig().delayBetweenCallsSeconds || 3
     if (!callState.stopRequested) await sleep(delaySecs * 1000)
   }
@@ -56,7 +70,7 @@ export async function startCallRunner(apiKey: string) {
   notifyCall()
 }
 
-export function pauseCallRunner()  { callState.pauseRequested = true;  callState.status = 'paused'; notifyCall() }
+export function pauseCallRunner()  { callState.pauseRequested = true;  callState.status = 'paused';  notifyCall() }
 export function resumeCallRunner() { callState.pauseRequested = false; callState.status = 'running'; notifyCall() }
 export function stopCallRunner()   { callState.stopRequested = true; callState.pauseRequested = false; callState.status = 'idle'; runnerActive = false; notifyCall() }
 
@@ -100,7 +114,7 @@ function inferOutcome(text: string) {
   return 'no-answer' as const
 }
 
-function getConfig() {
+function getConfig(): Record<string, any> {
   if (typeof window === 'undefined') return {}
   try {
     const raw = localStorage.getItem('seo_prospector_settings_v1')
