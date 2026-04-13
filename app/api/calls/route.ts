@@ -278,6 +278,10 @@ export async function POST(req: NextRequest) {
         maxDurationSeconds: maxCallDurationSeconds,
         backgroundDenoisingEnabled: true,
       },
+      monitorPlan: {
+        listenEnabled: true,
+        controlEnabled: true,
+      },
       metadata: { leadId: lead.id, leadName: bizName, niche, city, signals: lead.signals?.join(',') },
     }
 
