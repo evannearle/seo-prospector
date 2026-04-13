@@ -152,11 +152,16 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
   const [queue, setQueue]           = useState<GlobalQueueItem[]>([...callState.queue])
   const [selectedCall, setSelectedCall] = useState<GlobalQueueItem | null>(null)
   const [retrying, setRetrying] = useState(false)
+  const [testResult, setTestResult] = useState<{ok: boolean; msg: string; detail?: string} | null>(null)
   const [showScript, setShowScript] = useState(false)
   const [previewLead, setPreviewLead] = useState<Lead | null>(null)
 
   const settings = loadSettings()
-  const missingConfig = !settings.vapiApiKey || !settings.vapiPhoneNumberId
+  // Detailed config validation
+  const configIssues: string[] = []
+  if (!settings.vapiApiKey) configIssues.push('Vapi API key is missing')
+  if (!settings.vapiPhoneNumberId) configIssues.push('Vapi Phone Number ID is missing — this is the ID from Vapi dashboard, NOT the raw phone number like +15165550100')
+  const missingConfig = configIssues.length > 0
 
   // Subscribe to global call state
   useEffect(() => {
@@ -201,6 +206,38 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
   const clearQueue = () => {
     callState.queue = []
     notifyCall()
+  }
+
+  const testConfig = async () => {
+    setTestResult(null)
+    const s = loadSettings()
+    const issues: string[] = []
+    if (!s.vapiApiKey) issues.push('Vapi API key missing')
+    if (!s.vapiPhoneNumberId) issues.push('Vapi Phone Number ID missing')
+    if (issues.length > 0) { setTestResult({ ok: false, msg: issues.join(', ') }); return }
+
+    // Hit the Vapi API directly to validate credentials
+    try {
+      const resp = await fetch('https://api.vapi.ai/phone-number', {
+        headers: { Authorization: `Bearer ${s.vapiApiKey}` }
+      })
+      const data = await resp.json()
+      if (!resp.ok) {
+        setTestResult({ ok: false, msg: `Vapi API key invalid (${resp.status})`, detail: data.message || JSON.stringify(data).slice(0, 120) })
+        return
+      }
+      // Check phone number ID exists in their account
+      const numbers = Array.isArray(data) ? data : (data.results || [])
+      const match = numbers.find((n: any) => n.id === s.vapiPhoneNumberId)
+      if (!match) {
+        const ids = numbers.map((n: any) => `${n.id} (${n.number || 'no number'})`).join(', ')
+        setTestResult({ ok: false, msg: 'Phone Number ID not found in your Vapi account', detail: `IDs in your account: ${ids || 'none found'}` })
+        return
+      }
+      setTestResult({ ok: true, msg: `Connected! Found phone number: ${match.number || match.id}` })
+    } catch (e: any) {
+      setTestResult({ ok: false, msg: 'Network error testing Vapi credentials', detail: e.message })
+    }
   }
 
   const handleStart = () => {
@@ -255,15 +292,33 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
         </div>
 
         {missingConfig ? (
-          <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 8, padding: '9px 11px', fontSize: 11, color: '#991b1b', lineHeight: 1.5 }}>
-            ⚠ Missing Vapi credentials — add in <strong>Settings</strong>
+          <div style={{ background: '#fff5f5', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#991b1b', lineHeight: 1.6 }}>
+            <div style={{ fontWeight: 700, marginBottom: 5 }}>⚠ Cannot start calls — config issues:</div>
+            {configIssues.map((issue, i) => (
+              <div key={i} style={{ marginBottom: 3 }}>• {issue}</div>
+            ))}
+            <div style={{ marginTop: 7, paddingTop: 7, borderTop: '1px solid #fca5a5', color: '#7f1d1d', fontSize: 10 }}>
+              Fix these in the <strong>Settings</strong> tab. For Phone Number ID: go to app.vapi.ai → Phone Numbers → copy the ID shown under the number (looks like a UUID, not a phone number).
+            </div>
           </div>
         ) : (
-          <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '9px 11px', fontSize: 11, color: '#166534', lineHeight: 1.5 }}>
-            ✓ Vapi ready · {settings.agencyName}<br />
-            ✓ Caller: {settings.callerName}<br />
-            {settings.calendlyEventUrl && '✓ Calendly auto-booking on'}
-          </div>
+          <>
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '9px 11px', fontSize: 11, color: '#166534', lineHeight: 1.5 }}>
+              ✓ Vapi API key set<br />
+              ✓ Phone Number ID: {settings.vapiPhoneNumberId?.slice(0, 8)}...<br />
+              ✓ Caller: {settings.callerName} @ {settings.agencyName}<br />
+              {settings.calendlyEventUrl && <span>✓ Calendly booking enabled</span>}
+            </div>
+            <button onClick={testConfig} style={{ fontSize: 11, padding: '5px 11px', border: '1px solid #d1d5db', background: '#fff', borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', color: '#374151', fontWeight: 500 }}>
+              Test Vapi connection ↗
+            </button>
+            {testResult && (
+              <div style={{ background: testResult.ok ? '#f0fdf4' : '#fff5f5', border: `1px solid ${testResult.ok ? '#86efac' : '#fca5a5'}`, borderRadius: 8, padding: '9px 11px', fontSize: 11, color: testResult.ok ? '#166534' : '#991b1b', lineHeight: 1.6 }}>
+                {testResult.ok ? '✓ ' : '✗ '}{testResult.msg}
+                {testResult.detail && <div style={{ marginTop: 4, fontSize: 10, opacity: 0.8, wordBreak: 'break-all' }}>{testResult.detail}</div>}
+              </div>
+            )}
+          </>
         )}
 
         {leads.filter(l => l.phone).length === 0 ? (

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // ── Calendly ─────────────────────────────────────────────────────────────────
-
 async function getCalendlyUser(token: string) {
   const r = await fetch('https://api.calendly.com/users/me', { headers: { Authorization: `Bearer ${token}` } })
   return (await r.json()).resource
 }
-
 async function getEventTypeUri(token: string, url: string): Promise<string | null> {
   try {
     const user = await getCalendlyUser(token)
@@ -20,7 +18,6 @@ async function getEventTypeUri(token: string, url: string): Promise<string | nul
     )?.uri || null
   } catch { return null }
 }
-
 async function getAvailableSlots(token: string, uri: string) {
   const start = new Date()
   const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -30,7 +27,6 @@ async function getAvailableSlots(token: string, uri: string) {
   )
   return ((await r.json()).collection || []).slice(0, 3) as { start_time: string }[]
 }
-
 function formatSlots(slots: { start_time: string }[]) {
   return slots.map((s, i) => {
     const dt = new Date(s.start_time)
@@ -39,8 +35,6 @@ function formatSlots(slots: { start_time: string }[]) {
 }
 
 // ── Natural signal descriptions ───────────────────────────────────────────────
-// Written as a real person would say them, not like a spec sheet
-
 const SIGNAL_NATURAL: Record<string, string> = {
   fewReviews:         'only [COUNT] Google reviews',
   lowRating:          'a [RATING]-star rating on Google',
@@ -51,185 +45,154 @@ const SIGNAL_NATURAL: Record<string, string> = {
   noSchema:           'no structured data on your website',
   noMeta:             'missing meta descriptions on your site',
   noMobile:           'a website that is not mobile-friendly',
-  noSSL:              'no HTTPS — your site shows not secure in Chrome',
+  noSSL:              'no HTTPS security on your website',
   noCityMention:      'your city name barely appears on your own website',
   slowSite:           'a slow-loading website',
-  outrankedOnReviews: 'competitors with way more reviews',
+  outrankedOnReviews: 'competitors with way more reviews than you',
   lowEngagement:      'low review count and a rating that could hurt you',
-  chainDominates:     'national chains taking up the top spots near you',
+  chainDominates:     'national chains dominating your local results',
 }
-
 function naturalSigLabel(key: string, lead: { reviews?: number; rating?: number }): string {
-  const base = SIGNAL_NATURAL[key] || key
-  return base
+  return (SIGNAL_NATURAL[key] || key)
     .replace('[COUNT]', String(lead?.reviews || ''))
     .replace('[RATING]', lead?.rating ? lead.rating.toFixed(1) : '')
 }
 
-// ── Build the AI system prompt ────────────────────────────────────────────────
+// ── Build system prompt ───────────────────────────────────────────────────────
 function buildSystemPrompt(c: {
   callerName: string; callerTitle: string; agencyName: string; callerEmail: string
-  niche: string; city: string; bizName: string
-  reviews: number; rating: number
+  niche: string; city: string; bizName: string; reviews: number; rating: number
   sig1: string; sig2: string; allSigs: string[]
   callGoal: string; noAnswerBehavior: string
   valueProposition: string; offerLine: string
   bookingLink: string; slotsText: string; hasCalendly: boolean
-  maxDurationSeconds: number; aiTemperature: number
+  maxDurationSeconds: number
 }): string {
-
-  // Build specific, natural-sounding observations about this business
   const reviewObs = c.reviews > 0
-    ? c.reviews < 15
-      ? `you've only got ${c.reviews} Google reviews`
-      : c.reviews < 25
-      ? `you're sitting at ${c.reviews} Google reviews`
-      : `you've got ${c.reviews} reviews`
+    ? c.reviews < 15 ? `you have only ${c.reviews} Google reviews`
+      : c.reviews < 25 ? `you are sitting at ${c.reviews} Google reviews`
+      : `you have ${c.reviews} reviews`
     : 'your review count is pretty thin'
-
-  const ratingObs = c.rating > 0 && c.rating < 4.2
-    ? ` and a ${c.rating.toFixed(1)}-star average`
-    : ''
-
+  const ratingObs = c.rating > 0 && c.rating < 4.2 ? ` and a ${c.rating.toFixed(1)}-star average` : ''
   const specificFindings = `${reviewObs}${ratingObs}, plus ${c.sig2}`
 
-  // Booking instruction
   const bookingInstruction = c.hasCalendly && c.slotsText
-    ? `When they agree to a call, say: "Let me grab a couple of times that are open..." then read out:
-${c.slotsText}
-Ask: "Any of those work?" When they pick one, confirm: "Perfect — I've got you down for [time], you'll get a calendar invite in a minute."`
+    ? `When they agree to a call, say naturally: "Let me grab a couple of times that are open..." then read:\n${c.slotsText}\nAsk: "Any of those work?" When they pick one: "Perfect, I have got you down for [time], you will get a calendar invite shortly."`
     : c.bookingLink
-    ? `When they agree, say: "I'll shoot you a link right now, takes about 30 seconds to grab a time." Share: ${c.bookingLink}`
-    : `When they agree, arrange a time that works and confirm it clearly.`
+    ? `When they agree, say: "I will text you a quick link right now, takes about 30 seconds to grab a time." Share: ${c.bookingLink}`
+    : `When they agree, confirm a specific time and date with them directly.`
 
-  // Goal-specific approach
-  const goalApproach =
-    c.callGoal === 'book'
-      ? `Your goal is to book a discovery call. Don't try to close a deal — just get them curious enough to want 15 minutes with you.`
-      : c.callGoal === 'qualify'
-      ? `Your goal is to qualify first — ask if they're doing anything for their Google rankings — then pitch based on what they say.`
-      : `Your goal is to offer a free audit. Zero pressure. Success is them agreeing to receive it.`
+  const goalApproach = c.callGoal === 'book'
+    ? `Your goal is to book a discovery call. Do not try to close a deal. Just get them curious and willing to spend 15 minutes with you.`
+    : c.callGoal === 'qualify'
+    ? `First ask if they are doing anything for their Google rankings, then pitch based on what they say.`
+    : `Offer a completely free audit. Zero pressure.`
 
-  // No-answer
   const vmInstruction = c.noAnswerBehavior === 'voicemail'
-    ? `If you reach voicemail, leave something like: "Hey, this is ${c.callerName} from ${c.agencyName} — I was looking at ${c.bizName} on Google and noticed ${c.sig1}, which is probably costing you a few calls a week. Give me a ring back, or grab a time at ${c.bookingLink || 'our site'}. Talk soon."`
-    : `If no answer, hang up. Don't leave a voicemail.`
+    ? `If you reach voicemail, leave: "Hey, this is ${c.callerName} from ${c.agencyName}. I was looking at ${c.bizName} on Google and noticed ${c.sig1}, which is probably costing you a few calls a week. Give me a ring back or grab a time at ${c.bookingLink || 'our website'}. Talk soon."`
+    : `If no answer, hang up politely. Do not leave a voicemail.`
 
-  return `You are ${c.callerName}, a ${c.callerTitle} at ${c.agencyName}. You're making an outbound call to ${c.bizName}, a ${c.niche} in ${c.city}.
+  return `You are ${c.callerName}, a ${c.callerTitle} at ${c.agencyName}. You are making an outbound sales call to ${c.bizName}, a ${c.niche} in ${c.city}.
 
-You sound like a real person — not a script reader. You talk the way actual salespeople talk: natural pacing, some filler words, you pause, you listen, you react to what they say. You reference specific things you actually found about their business, not generic talking points.
+You sound like a real person, not a script reader. Natural pacing, you listen, you react. Reference specific things you actually found.
 
-━━━ WHAT YOU FOUND ━━━
-You specifically looked up ${c.bizName} before calling and found:
+WHAT YOU FOUND ABOUT ${c.bizName.toUpperCase()}:
 - ${c.sig1}
 - ${c.sig2}
 ${c.allSigs.slice(2).map(s => `- ${s}`).join('\n')}
 
-Reference these naturally — "So I was looking at your listing and noticed..." not "I have identified the following issues."
+YOUR GOAL: ${goalApproach}
 
-━━━ YOUR GOAL ━━━
-${goalApproach}
-
-━━━ HOW TO OPEN ━━━
-Never start with "How are you today?" or "Is this a bad time?" — both immediately signal telemarketer.
-
-Instead:
+OPENING (never say "how are you today" or "is this a bad time"):
 "Hi, is the owner or manager around?"
-[Connected] — take a breath, then:
-"Hey — so my name's ${c.callerName}, I'll keep it real quick. I was actually just looking at ${c.niche}s in ${c.city} on Google and I came across ${c.bizName}. I found something on your listing I think you'd genuinely want to know about. You got like 60 seconds?"
+[Connected] Pause naturally, then:
+"Hey, my name is ${c.callerName}, I will keep it real quick. I was just looking at ${c.niche}s in ${c.city} on Google and I came across ${c.bizName}. I found something on your listing I think you would want to know about. You got about 60 seconds?"
 
-━━━ AFTER THEY SAY YES ━━━
-Lead with their pain, not your features. Be specific. Pause after you say it.
-
-"So what I found is — ${specificFindings}. For a ${c.niche} in ${c.city}, that's basically what's keeping you off the first page when someone nearby searches right now."
-
-[Pause. Let it land. Don't rush to fill the silence.]
-
-"I've helped other ${c.niche}s fix this — usually within about 90 days they're showing up in the top 3 on Maps, more calls coming in, nothing extra on ads."
-
-Then deliver your value prop naturally:
+AFTER THEY SAY YES (lead with their pain, be specific, pause after):
+"So what I found is that ${specificFindings}. For a ${c.niche} in ${c.city}, that is basically what keeps businesses off the first page when someone nearby is searching right now."
+[Pause. Let it sit. Do not rush.]
+"I have helped other ${c.niche}s fix exactly this and get into the top 3 on Google Maps within about 90 days. More calls, nothing extra on ads."
 "${c.valueProposition}"
 
-━━━ GET A SMALL YES FIRST ━━━
-Before making your ask, get them nodding:
-"Can I ask — do you actually know where ${c.bizName} shows up right now when someone in ${c.city} searches for a ${c.niche}?"
-[They say no] → "Yeah, that's super common. Would it be helpful if I showed you exactly where you're at and what it'd take to fix it?"
+MICRO-COMMITMENT (before the big ask):
+"Can I ask, do you actually know where ${c.bizName} shows up right now when someone in ${c.city} searches for a ${c.niche}?"
+[They say no] "Yeah, that is really common. Would it help if I showed you exactly where you stand and what it would take to fix it?"
 
-━━━ THE ASK ━━━
+THE ASK:
 "${c.offerLine}"
-
 ${bookingInstruction}
 
-━━━ BOOKING CLOSE ━━━
-Never ask "Do you want to book?" — that's a yes/no door.
-Instead: "Would earlier in the week or a bit later work better for you?"
-Then offer specific times. Two options max.
+BOOKING CLOSE:
+Never ask "do you want to book?" Instead: "Would earlier in the week or a bit later work better?"
+Then give two specific options.
 
-━━━ OBJECTIONS — sound human, not scripted ━━━
+OBJECTIONS:
+"Not interested" -> "Totally fair. Can I just ask, do you know how many people search for a ${c.niche} in ${c.city} every month?" [Still no] -> "No worries, can I send a quick email with what I found?"
+"Already have someone" -> "Oh good, are they actively managing your Google Business Profile? I ask because I noticed ${c.sig1}."
+"Call me back" -> "Sure, when exactly works? I want to have your audit ready." [Get a specific time]
+"How much?" -> "The audit is completely free, no catch." [Back to booking]
+"Email me" -> "Sure, best email?" [Get it] "What is your biggest challenge getting new customers right now?"
 
-"Not interested" →
-"Yeah, totally fair. Can I just ask — do you know how many people are searching for a ${c.niche} in ${c.city} every month? It's actually pretty high." [Still no] → "No worries — can I send you a quick email with what I found? Just so you've got it."
-
-"We already have someone" →
-"Oh nice — are they actively managing your Google Business Profile? I ask because I noticed ${c.sig1}, and that's usually something that gets caught." [Pause] → "Might be worth a second look just to make sure nothing's slipping through."
-
-"Call me back later" →
-"Sure — when exactly works? I want to have your full audit ready." [Get a specific time, don't accept vague.]
-
-"How much does it cost?" →
-"The audit's free — no catch. If after seeing it you want to talk about working together, great, but that's totally up to you." [Back to booking.]
-
-"Just email me" →
-"Absolutely — best email?" [Get it.] "Perfect. And so I can make it specific — what's the biggest pain right now around getting new customers?" [Qualify while you have them.]
-
-"Not a priority right now" →
-"I get that. Is that more of a timing thing or a budget thing?" [Diagnose the real objection.]
-
-━━━ GRACEFUL EXIT ━━━
-After two genuine attempts if they're a firm no:
-"I completely get it. I'm going to shoot you a quick summary of what I found anyway — just so you've got it when the timing makes sense. Best email?"
-[Get email if possible.] "Thanks for picking up — good luck with everything."
-
+GRACEFUL EXIT (firm no after two attempts):
+"I completely get it. I will send a quick summary of what I found anyway, just so you have it. Best email?"
 Never burn the bridge.
 
-━━━ VOICEMAIL ━━━
-${vmInstruction}
+VOICEMAIL: ${vmInstruction}
 
-━━━ RULES ━━━
-- Sound like a person, not a robot reading a script
-- Use natural language: "I was looking at your listing", "I noticed", "I found", "you've got"
-- Don't say "I have identified", "I have determined", "As per my research"
-- Pause after landing problems — silence means they're thinking
-- If they go off topic, go with it briefly, then bring it back
-- If they ask your email: ${c.callerEmail}
-- Max call: ${Math.round(c.maxDurationSeconds / 60)} minutes`
+RULES:
+- Sound human: "I was looking at your listing", "I noticed", not "I have identified"
+- Pause after landing the problem, do not fill silence immediately  
+- Keep total call under ${Math.round(c.maxDurationSeconds / 60)} minutes
+- If they ask your email: ${c.callerEmail}`
 }
 
 // ── POST ──────────────────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
   try {
-    const { lead, config } = await req.json()
+    const body = await req.json()
+    const { lead, config } = body
+
+    // Detailed validation with specific error messages for debugging
+    const validationErrors: string[] = []
+    if (!config?.vapiApiKey)    validationErrors.push('vapiApiKey is missing or empty')
+    if (!config?.phoneNumberId) validationErrors.push('phoneNumberId is missing or empty (this should map from vapiPhoneNumberId in settings)')
+    if (!lead?.phone)           validationErrors.push(`lead.phone is missing (lead: ${lead?.name || 'unknown'})`)
+
+    if (validationErrors.length > 0) {
+      console.error('Calls API validation failed:', validationErrors)
+      console.error('Config received:', JSON.stringify({
+        hasVapiKey: !!config?.vapiApiKey,
+        vapiKeyPrefix: config?.vapiApiKey?.slice(0, 8) + '...',
+        hasPhoneId: !!config?.phoneNumberId,
+        phoneIdValue: config?.phoneNumberId,
+        leadPhone: lead?.phone,
+        leadName: lead?.name,
+      }))
+      return NextResponse.json({
+        error: validationErrors[0],
+        allErrors: validationErrors,
+        debug: {
+          hasVapiApiKey: !!config?.vapiApiKey,
+          hasPhoneNumberId: !!config?.phoneNumberId,
+          phoneNumberIdValue: config?.phoneNumberId || null,
+          hasLeadPhone: !!lead?.phone,
+          configKeys: config ? Object.keys(config) : [],
+        }
+      }, { status: 400 })
+    }
+
     const {
       vapiApiKey, phoneNumberId,
-      agencyName = 'our agency',
-      callerName = 'the team',
-      callerTitle = 'Local SEO Specialist',
-      callerEmail = '',
-      bookingLink = '',
-      calendlyToken = '',
-      callGoal = 'book',
-      noAnswerBehavior = 'voicemail',
-      valueProposition = "We've helped local businesses just like yours go from invisible on Google to showing up in the top 3 on Maps — more calls coming in without touching the ad budget.",
-      offerLine = "I'd love to set up a quick 15-minute call so we can walk through exactly what I found and what it would take to fix it.",
+      agencyName = 'our agency', callerName = 'the team',
+      callerTitle = 'Local SEO Specialist', callerEmail = '',
+      bookingLink = '', calendlyToken = '',
+      callGoal = 'book', noAnswerBehavior = 'voicemail',
+      valueProposition = "We have helped local businesses just like yours go from invisible on Google to showing up in the top 3 on Maps, bringing in more calls without spending a dollar on ads.",
+      offerLine = "I would love to set up a quick 15-minute call so we can walk through exactly what I found and what it would take to fix it.",
       maxCallDurationSeconds = 600,
       voiceId = 'pNInz6obpgDQGcFmaJgB',
       aiTemperature = 0.7,
     } = config
-
-    if (!vapiApiKey)    return NextResponse.json({ error: 'Missing Vapi API key' }, { status: 400 })
-    if (!phoneNumberId) return NextResponse.json({ error: 'Missing phone number ID' }, { status: 400 })
-    if (!lead?.phone)   return NextResponse.json({ error: 'Lead has no phone number' }, { status: 400 })
 
     const niche   = lead.niche || 'business'
     const city    = (lead.addr || '').split(',')[0] || 'your area'
@@ -258,10 +221,17 @@ export async function POST(req: NextRequest) {
       sig1, sig2, allSigs: sigs,
       callGoal, noAnswerBehavior, valueProposition, offerLine,
       bookingLink, slotsText, hasCalendly: !!(calendlyToken && bookingLink && slotsText),
-      maxDurationSeconds: maxCallDurationSeconds, aiTemperature,
+      maxDurationSeconds: maxCallDurationSeconds,
     })
 
-    const body = {
+    console.log('Dispatching Vapi call:', {
+      phoneNumberId,
+      toNumber: lead.phone,
+      bizName,
+      vapiKeyPrefix: vapiApiKey.slice(0, 8) + '...',
+    })
+
+    const vapiBody = {
       phoneNumberId,
       customer: { number: lead.phone, name: bizName },
       assistantOverrides: {
@@ -275,29 +245,54 @@ export async function POST(req: NextRequest) {
         silenceTimeoutSeconds: 30,
         maxDurationSeconds: maxCallDurationSeconds,
       },
-      metadata: { leadId: lead.id, leadName: bizName, niche, city, signals: lead.signals?.join(','), availableSlots: slotsText || 'none' },
+      metadata: { leadId: lead.id, leadName: bizName, niche, city, signals: lead.signals?.join(',') },
     }
 
     const resp = await fetch('https://api.vapi.ai/call/phone', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${vapiApiKey}` },
-      body: JSON.stringify(body),
+      body: JSON.stringify(vapiBody),
     })
-    const data = await resp.json()
-    if (!resp.ok) return NextResponse.json({ error: data.message || 'Vapi error', details: data }, { status: resp.status })
 
-    return NextResponse.json({ callId: data.id, status: data.status, availableSlots: slotsText, ...data })
+    const data = await resp.json()
+
+    if (!resp.ok) {
+      console.error('Vapi API error:', resp.status, JSON.stringify(data))
+      return NextResponse.json({
+        error: data.message || `Vapi error ${resp.status}`,
+        vapiError: data,
+        hint: resp.status === 400
+          ? 'Check that your phoneNumberId is the ID from Vapi dashboard (not the raw phone number), and that your API key is correct.'
+          : resp.status === 401
+          ? 'Vapi API key is invalid or expired.'
+          : undefined
+      }, { status: resp.status })
+    }
+
+    console.log('Vapi call dispatched successfully:', data.id, 'status:', data.status)
+    return NextResponse.json({ callId: data.id, status: data.status, ...data })
+
   } catch (err: unknown) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Unknown error' }, { status: 500 })
+    const msg = err instanceof Error ? err.message : 'Unknown error'
+    console.error('Calls route exception:', msg)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
 
 // ── GET — poll status ─────────────────────────────────────────────────────────
-
 export async function GET(req: NextRequest) {
   const callId = req.nextUrl.searchParams.get('callId')
   const apiKey = req.nextUrl.searchParams.get('apiKey')
-  if (!callId || !apiKey) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
-  const resp = await fetch(`https://api.vapi.ai/call/${callId}`, { headers: { Authorization: `Bearer ${apiKey}` } })
-  return NextResponse.json(await resp.json())
+  if (!callId || !apiKey) return NextResponse.json({ error: 'Missing callId or apiKey params' }, { status: 400 })
+
+  const resp = await fetch(`https://api.vapi.ai/call/${callId}`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+  const data = await resp.json()
+
+  if (!resp.ok) {
+    console.error('Vapi poll error:', resp.status, JSON.stringify(data))
+  }
+
+  return NextResponse.json(data)
 }

@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   try {
     const { lead, call, config } = await req.json()
-    const { alertEmail, resendApiKey, agencyName = 'SEO Prospector', callerName = 'Your AI caller' } = config
+    const { alertEmail, agencyName = 'SEO Prospector', callerName = 'Your AI caller' } = config
+    // Use env var first (set in Vercel dashboard), fall back to user-configured key
+    const resendApiKey = process.env.RESEND_API_KEY || config.resendApiKey
 
     if (!alertEmail) return NextResponse.json({ error: 'No alert email configured' }, { status: 400 })
     if (!resendApiKey) return NextResponse.json({ error: 'No Resend API key configured' }, { status: 400 })
