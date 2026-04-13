@@ -25,12 +25,12 @@ export default function ProspectorTab() {
   const [customNiche, setCustomNiche] = useState('')
   const [loc, setLoc]         = useState(settings.defaultLocation || 'Farmingdale, NY')
   const [maxR, setMaxR]       = useState(settings.defaultMaxResults || '40')
-  const [minScore, setMinScore] = useState(settings.defaultMinScore || '3')
+  const [minScore, setMinScore] = useState('1') // default show all — filter after scanning
 
   const [activeSigs, setActiveSigs] = useState<Set<string>>(new Set([
     'fewReviews','lowRating','noWebsite','noPhone','noHours','fewPhotos',
     'noSchema','noMeta','noMobile','noSSL','noCityMention','slowSite',
-    'outrankedOnReviews','lowEngagement',
+    'outrankedOnReviews','lowEngagement','chainDominates',
   ]))
   const [running, setRunning]   = useState(false)
   const [logLines, setLogLines] = useState<{cls:string,msg:string}[]>([])
@@ -101,27 +101,18 @@ export default function ProspectorTab() {
   })
 
   const analyzeWebsite = async (url: string, city: string): Promise<WebAnalysis> => {
-    const r: WebAnalysis = { fetchOk: false, noSSL: false, noSchema: null, noMeta: null, noMobile: null, noCityMention: null, slowSite: null }
+    const fallback: WebAnalysis = { fetchOk: false, noSSL: !url.startsWith('https'), noSchema: null, noMeta: null, noMobile: null, noCityMention: null, slowSite: null }
     try {
-      const full = url.startsWith('http') ? url : 'https://' + url
-      r.noSSL = !full.startsWith('https')
-      const t0 = Date.now()
+      // Use our server-side API route — avoids CORS, rate limits, and unreliable proxies
       const resp = await Promise.race([
-        fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(full)}&t=${t0}`, { cache: 'no-store' }),
-        new Promise<never>((_, rj) => setTimeout(() => rj(new Error('timeout')), 8000))
+        fetch(`/api/analyze-website?url=${encodeURIComponent(url)}&city=${encodeURIComponent(city)}`),
+        new Promise<never>((_, rj) => setTimeout(() => rj(new Error('timeout')), 12000))
       ])
-      const elapsed = Date.now() - t0
-      if (!(resp as Response).ok) return r
-      const json = await (resp as Response).json()
-      const html = (json.contents || '').toLowerCase()
-      if (!html) return r
-      r.fetchOk = true; r.slowSite = elapsed > 3500
-      r.noSchema = !html.includes('application/ld+json') && !html.includes('schema.org')
-      r.noMeta = !html.includes('name="description') && !html.includes("name='description")
-      r.noMobile = !html.includes('viewport')
-      r.noCityMention = !html.includes(city.toLowerCase())
-    } catch { }
-    return r
+      if (!(resp as Response).ok) return fallback
+      return await (resp as Response).json()
+    } catch {
+      return fallback
+    }
   }
 
   const scorePlace = (detail: any, all: any[], currentActiveSigs: Set<string>, webData?: WebAnalysis | null): Lead => {
@@ -140,7 +131,7 @@ export default function ProspectorTab() {
     const website  = detail.website || null
 
     // GMB signals
-    if (reviews < 25)               add('fewReviews')
+    if (reviews < 50)               add('fewReviews')
     if (rating > 0 && rating < 4)   add('lowRating')
     if (!website)                    add('noWebsite')
     if (!phone)                      add('noPhone')
@@ -159,8 +150,8 @@ export default function ProspectorTab() {
 
     // Competitive signals
     const maxReviews = Math.max(...all.map(p => p.user_ratings_total || 0), 1)
-    if (reviews > 0 && maxReviews / reviews >= 3) add('outrankedOnReviews')
-    if (reviews < 15 && rating > 0 && rating < 4.2) add('lowEngagement')
+    if (reviews > 0 && maxReviews / reviews >= 2) add('outrankedOnReviews')
+    if (reviews < 50 && rating > 0 && rating < 4.4) add('lowEngagement')
     const chains = ['angi','homeadvisor','1-800','rooter','aspen dental','heartland','pacific dental','western dental']
     const top3Names = all.slice(0, 3).map(p => (p.name || '').toLowerCase())
     if (top3Names.some(n => chains.some(c => n.includes(c)))) add('chainDominates')
@@ -222,7 +213,10 @@ export default function ProspectorTab() {
 
         // Single scoring pass — handles GMB + web + competitive signals
         const lead = scorePlace(detail, places, currentActiveSigs, webData)
-        log('lok', `  ✓ ${lead.phone || 'no phone'} · score ${lead.score}/10 · ${lead.signals.length} signals`)
+        const sigSummary = lead.signals.length
+          ? lead.signals.slice(0,3).map((s:string) => SIGNALS[s]?.label || s).join(', ')
+          : 'strong profile — no weak signals found'
+        log(lead.score > 0 ? 'lok' : 'lwarn', `  ✓ ${lead.name.slice(0,28)} · ${lead.score}/10 · ${sigSummary}`)
         if (lead.score >= parseInt(minScore)) scored.push(lead)
       }
       scored.sort((a, b) => b.score - a.score || b.signals.length - a.signals.length)
@@ -282,9 +276,12 @@ export default function ProspectorTab() {
                 <option value="20">20</option><option value="40">40</option><option value="60">60</option>
               </select>
             </Field>
-            <Field label="Min score">
+            <Field label="Min score (show all = 1+)">
               <select value={minScore} onChange={e => setMinScore(e.target.value)} style={inputStyle}>
-                <option value="1">1+</option><option value="3">3+</option><option value="5">5+</option><option value="8">8+</option>
+                <option value="1">1+ (show all)</option>
+                <option value="3">3+ (some issues)</option>
+                <option value="5">5+ (priority only)</option>
+                <option value="8">8+ (critical only)</option>
               </select>
             </Field>
           </div>

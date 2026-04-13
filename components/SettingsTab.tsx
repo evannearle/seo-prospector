@@ -60,7 +60,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultNiche: 'plumber',
   defaultLocation: 'Farmingdale, NY',
   defaultMaxResults: '40',
-  defaultMinScore: '3',
+  defaultMinScore: '1',
 }
 
 export const SETTINGS_KEY = 'seo_prospector_settings_v1'

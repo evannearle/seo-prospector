@@ -63,7 +63,7 @@ export interface Signal {
 }
 
 export const SIGNALS: Record<string, Signal> = {
-  fewReviews:          { label: 'Under 25 reviews',        color: 'r', pts: 3 },
+  fewReviews:          { label: 'Under 50 reviews',        color: 'r', pts: 3 },
   lowRating:           { label: 'Rating < 4.0',             color: 'r', pts: 2 },
   noWebsite:           { label: 'No website',               color: 'r', pts: 3 },
   noPhone:             { label: 'No phone number',           color: 'r', pts: 2 },
