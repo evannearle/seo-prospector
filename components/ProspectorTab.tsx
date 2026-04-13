@@ -124,27 +124,56 @@ export default function ProspectorTab() {
     return r
   }
 
-  const scorePlace = (detail: any, all: any[]): Lead => {
+  const scorePlace = (detail: any, all: any[], currentActiveSigs: Set<string>, webData?: WebAnalysis | null): Lead => {
     const sigs: string[] = []; let score = 0
-    const add = (k: string) => { if (activeSigs.has(k)) { sigs.push(k); score += SIGNALS[k]?.pts || 0 } }
-    const reviews = detail.user_ratings_total || 0, rating = detail.rating || 0
-    const photos = (detail.photos || []).length
+    const add = (k: string) => {
+      if (currentActiveSigs.has(k) && !sigs.includes(k)) {
+        sigs.push(k)
+        score += SIGNALS[k]?.pts || 0
+      }
+    }
+    const reviews  = detail.user_ratings_total || 0
+    const rating   = detail.rating || 0
+    const photos   = (detail.photos || []).length
     const hasHours = !!(detail.opening_hours?.weekday_text?.length)
-    const phone = detail.formatted_phone_number || detail.international_phone_number || null
-    const website = detail.website || null
-    if (reviews < 25) add('fewReviews')
-    if (rating > 0 && rating < 4) add('lowRating')
-    if (!website) add('noWebsite')
-    if (!phone) add('noPhone')
-    if (!hasHours) add('noHours')
-    if (photos < 5) add('fewPhotos')
+    const phone    = detail.formatted_phone_number || detail.international_phone_number || null
+    const website  = detail.website || null
+
+    // GMB signals
+    if (reviews < 25)               add('fewReviews')
+    if (rating > 0 && rating < 4)   add('lowRating')
+    if (!website)                    add('noWebsite')
+    if (!phone)                      add('noPhone')
+    if (!hasHours)                   add('noHours')
+    if (photos < 5)                  add('fewPhotos')
+
+    // Website signals (if web data available)
+    if (webData?.fetchOk) {
+      if (webData.noSchema)       add('noSchema')
+      if (webData.noMeta)         add('noMeta')
+      if (webData.noMobile)       add('noMobile')
+      if (webData.noCityMention)  add('noCityMention')
+      if (webData.slowSite)       add('slowSite')
+    }
+    if (webData?.noSSL)           add('noSSL')  // SSL check doesn't need fetchOk
+
+    // Competitive signals
+    const maxReviews = Math.max(...all.map(p => p.user_ratings_total || 0), 1)
+    if (reviews > 0 && maxReviews / reviews >= 3) add('outrankedOnReviews')
+    if (reviews < 15 && rating > 0 && rating < 4.2) add('lowEngagement')
+    const chains = ['angi','homeadvisor','1-800','rooter','aspen dental','heartland','pacific dental','western dental']
+    const top3Names = all.slice(0, 3).map(p => (p.name || '').toLowerCase())
+    if (top3Names.some(n => chains.some(c => n.includes(c)))) add('chainDominates')
+
     return {
       id: `${detail.place_id}_${Date.now()}`,
-      name: detail.name || 'Unknown', addr: detail.formatted_address || detail.vicinity || '',
+      name: detail.name || 'Unknown',
+      addr: detail.formatted_address || detail.vicinity || '',
       phone, website, rating, reviews, photos, hasHours,
       mapsUrl: detail.url || `https://www.google.com/maps/place/?q=place_id:${detail.place_id}`,
       placeId: detail.place_id, signals: sigs, score: Math.min(10, score),
       niche: actualNiche, status: 'new', savedAt: new Date().toISOString(),
+      webData: webData || null,
     }
   }
 
@@ -170,40 +199,30 @@ export default function ProspectorTab() {
       if (!places.length) throw new Error(`No results found. Try a broader location.`)
       log('lok', `✓ ${places.length} businesses found`); setPct(25)
       const city = loc.split(',')[0].trim()
-      const webSigs = ['noSchema','noMeta','noMobile','noSSL','noCityMention','slowSite'].some(s => activeSigs.has(s))
-      places.forEach(p => p._reviews = p.user_ratings_total || 0)
+      const currentActiveSigs = new Set(Array.from(activeSigs)) // snapshot — avoid stale closure
+      const webSigsOn = ['noSchema','noMeta','noMobile','noSSL','noCityMention','slowSite'].some(s => currentActiveSigs.has(s))
       const scored: Lead[] = []
+
       for (let i = 0; i < places.length; i++) {
         const basic = places[i]
         setPct(25 + Math.round((i / places.length) * 65))
         log('linfo', `  → ${basic.name}`)
         const detail = await getDetails(basic.place_id)
         if (!detail) { log('lwarn', '  ⚠ Skipped'); continue }
+
+        // Fetch website data if web signals are active
         let webData: WebAnalysis | null = null
         if (detail.website) {
-          webData = webSigs
-            ? await analyzeWebsite(detail.website, city)
-            : { fetchOk: false, noSSL: !detail.website.startsWith('https'), noSchema: null, noMeta: null, noMobile: null, noCityMention: null, slowSite: null }
-          if (webData.fetchOk) {
-            const lead = scorePlace(detail, places)
-            const extra: string[] = []
-            let extraScore = 0
-            if (webData.noSchema && activeSigs.has('noSchema'))       { extra.push('noSchema');      extraScore += 2 }
-            if (webData.noMeta && activeSigs.has('noMeta'))           { extra.push('noMeta');        extraScore += 1 }
-            if (webData.noMobile && activeSigs.has('noMobile'))       { extra.push('noMobile');      extraScore += 2 }
-            if (webData.noSSL && activeSigs.has('noSSL'))             { extra.push('noSSL');         extraScore += 2 }
-            if (webData.noCityMention && activeSigs.has('noCityMention')) { extra.push('noCityMention'); extraScore += 1 }
-            if (webData.slowSite && activeSigs.has('slowSite'))       { extra.push('slowSite');      extraScore += 1 }
-            lead.signals = [...new Set([...lead.signals, ...extra])]
-            lead.score = Math.min(10, lead.score + extraScore)
-            lead.webData = webData
-            log('lok', `  ✓ score ${lead.score}/10`)
-            if (lead.score >= parseInt(minScore)) scored.push(lead)
-            continue
+          if (webSigsOn) {
+            webData = await analyzeWebsite(detail.website, city)
+          } else {
+            webData = { fetchOk: false, noSSL: !detail.website.startsWith('https'), noSchema: null, noMeta: null, noMobile: null, noCityMention: null, slowSite: null }
           }
         }
-        const lead = { ...scorePlace(detail, places), webData }
-        log('lok', `  ✓ score ${lead.score}/10`)
+
+        // Single scoring pass — handles GMB + web + competitive signals
+        const lead = scorePlace(detail, places, currentActiveSigs, webData)
+        log('lok', `  ✓ ${lead.phone || 'no phone'} · score ${lead.score}/10 · ${lead.signals.length} signals`)
         if (lead.score >= parseInt(minScore)) scored.push(lead)
       }
       scored.sort((a, b) => b.score - a.score || b.signals.length - a.signals.length)
