@@ -231,19 +231,32 @@ export async function POST(req: NextRequest) {
       vapiKeyPrefix: vapiApiKey.slice(0, 8) + '...',
     })
 
+    // Vapi requires either assistantId (pre-created) or inline assistant object.
+    // assistantOverrides only works when ALSO passing assistantId.
+    // We use inline assistant with the correct schema.
     const vapiBody = {
       phoneNumberId,
-      customer: { number: lead.phone, name: bizName },
-      assistantOverrides: {
+      customer: {
+        number: lead.phone,
+        name: bizName,
+        numberE164CheckEnabled: false, // prevents E.164 strict validation errors
+      },
+      assistant: {
         firstMessage: `Hi, is the owner or manager around?`,
-        systemPrompt,
-        model: { provider: 'anthropic', model: 'claude-haiku-4-5', temperature: aiTemperature },
-        voice: { provider: '11labs', voiceId },
+        model: {
+          provider: 'anthropic',
+          model: 'claude-haiku-4-5',
+          temperature: aiTemperature,
+          messages: [{ role: 'system', content: systemPrompt }],
+        },
+        voice: {
+          provider: '11labs',
+          voiceId,
+        },
         recordingEnabled: true,
-        transcriptPlan: { enabled: true },
-        endCallFunctionEnabled: true,
         silenceTimeoutSeconds: 30,
         maxDurationSeconds: maxCallDurationSeconds,
+        endCallPhrases: ['goodbye', 'take care', 'have a good day', 'talk soon'],
       },
       metadata: { leadId: lead.id, leadName: bizName, niche, city, signals: lead.signals?.join(',') },
     }
