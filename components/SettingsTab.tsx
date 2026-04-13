@@ -67,7 +67,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxCallDurationSeconds: 600,
   delayBetweenCallsSeconds: 3,
   callModel: 'gpt-4o-mini',
-  voiceId: 'pNInz6obpgDQGcFmaJgB',
+  voiceId: 'oWAxZDx7w5VEj9dCyTzz',
   aiTemperature: 0.7,
   pitchFocus: 'google_maps',
   valueProposition: "We've helped local businesses just like yours go from page 3 to the top 3 on Google Maps — bringing in more calls and jobs without spending a dollar on ads.",
@@ -287,7 +287,7 @@ export default function SettingsTab() {
                 <option value="gpt-4-turbo">GPT-4 Turbo</option>
               </select>
             </Field>
-            <Field label="AI voice (ElevenLabs voice ID)" hint="Default is 'Adam' (pNInz6obpgDQGcFmaJgB). Find more at elevenlabs.io.">
+            <Field label="AI voice (ElevenLabs voice ID)" hint="Layla (oWAxZDx7w5VEj9dCyTzz) is the default. Find more IDs at elevenlabs.io/voice-library.">
               <input value={s.voiceId} onChange={e => set('voiceId', e.target.value)} style={inp} />
             </Field>
             <Field label="AI temperature (0 = consistent, 1 = creative)" hint="0.7 is the sweet spot for natural, confident calls.">
