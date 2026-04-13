@@ -22,6 +22,7 @@ export interface AppSettings {
   noAnswerBehavior: string
   maxCallDurationSeconds: number
   delayBetweenCallsSeconds: number
+  callModel: string
   voiceId: string
   aiTemperature: number
 
@@ -65,6 +66,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   noAnswerBehavior: 'voicemail',
   maxCallDurationSeconds: 600,
   delayBetweenCallsSeconds: 3,
+  callModel: 'gpt-4o-mini',
   voiceId: 'pNInz6obpgDQGcFmaJgB',
   aiTemperature: 0.7,
   pitchFocus: 'google_maps',
@@ -278,6 +280,13 @@ export default function SettingsTab() {
             </Field>
           </Row>
           <Row>
+            <Field label="Call AI model" hint="gpt-4o-mini is fast and cheap. gpt-4o is smarter. Both work with Vapi out of the box.">
+              <select value={s.callModel} onChange={e => set('callModel', e.target.value)} style={selStyle}>
+                <option value="gpt-4o-mini">GPT-4o Mini (fast, cheap — recommended)</option>
+                <option value="gpt-4o">GPT-4o (smarter, costs more)</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+              </select>
+            </Field>
             <Field label="AI voice (ElevenLabs voice ID)" hint="Default is 'Adam' (pNInz6obpgDQGcFmaJgB). Find more at elevenlabs.io.">
               <input value={s.voiceId} onChange={e => set('voiceId', e.target.value)} style={inp} />
             </Field>

@@ -190,6 +190,7 @@ export async function POST(req: NextRequest) {
       valueProposition = "We have helped local businesses just like yours go from invisible on Google to showing up in the top 3 on Maps, bringing in more calls without spending a dollar on ads.",
       offerLine = "I would love to set up a quick 15-minute call so we can walk through exactly what I found and what it would take to fix it.",
       maxCallDurationSeconds = 600,
+      callModel = 'gpt-4o-mini',
       voiceId = 'pNInz6obpgDQGcFmaJgB',
       aiTemperature = 0.7,
     } = config
@@ -231,23 +232,22 @@ export async function POST(req: NextRequest) {
       vapiKeyPrefix: vapiApiKey.slice(0, 8) + '...',
     })
 
-    // Vapi requires either assistantId (pre-created) or inline assistant object.
-    // assistantOverrides only works when ALSO passing assistantId.
-    // We use inline assistant with the correct schema.
+    // Vapi transient assistant — inline assistant object per official docs
+    // Endpoint: /call (not /call/phone)
+    // Model systemPrompt goes directly in assistant.model, not messages array
     const vapiBody = {
       phoneNumberId,
       customer: {
         number: lead.phone,
         name: bizName,
-        numberE164CheckEnabled: false, // prevents E.164 strict validation errors
       },
       assistant: {
         firstMessage: `Hi, is the owner or manager around?`,
         model: {
-          provider: 'anthropic',
-          model: 'claude-haiku-4-5',
+          provider: 'openai',           // openai-compatible provider format
+          model: callModel,
+          systemPrompt,
           temperature: aiTemperature,
-          messages: [{ role: 'system', content: systemPrompt }],
         },
         voice: {
           provider: '11labs',
@@ -256,12 +256,12 @@ export async function POST(req: NextRequest) {
         recordingEnabled: true,
         silenceTimeoutSeconds: 30,
         maxDurationSeconds: maxCallDurationSeconds,
-        endCallPhrases: ['goodbye', 'take care', 'have a good day', 'talk soon'],
+        backgroundDenoisingEnabled: true,
       },
       metadata: { leadId: lead.id, leadName: bizName, niche, city, signals: lead.signals?.join(',') },
     }
 
-    const resp = await fetch('https://api.vapi.ai/call/phone', {
+    const resp = await fetch('https://api.vapi.ai/call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${vapiApiKey}` },
       body: JSON.stringify(vapiBody),

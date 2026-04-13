@@ -239,6 +239,7 @@ function buildConfig(): Record<string, any> {
       noAnswerBehavior:        raw.noAnswerBehavior,
       valueProposition:        raw.valueProposition,
       offerLine:               raw.offerLine,
+      callModel:               raw.callModel || 'gpt-4o-mini',
       maxCallDurationSeconds:  raw.maxCallDurationSeconds || 600,
       voiceId:                 raw.voiceId || 'pNInz6obpgDQGcFmaJgB',
       aiTemperature:           raw.aiTemperature || 0.7,

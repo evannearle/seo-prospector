@@ -459,6 +459,7 @@ export default function PhoneTab({ queueIds, onQueueChange }: { queueIds: string
                         {item.recordingUrl && <span style={{ fontSize: 9, color: '#2563eb' }}>🎙 Recording</span>}
                         {item.crmPushed && <span style={{ fontSize: 9, color: '#16a34a' }}>✓ CRM</span>}
                         {(item.retryCount || 0) > 0 && <span style={{ fontSize: 9, color: '#9ca3af' }}>retry {item.retryCount}</span>}
+                        {item.error && <span style={{ fontSize: 9, color: '#dc2626', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginTop: 2 }} title={item.error}>⚠ {item.error}</span>}
                       </div>
                       {item.status === 'queued' && (
                         <button onClick={e => { e.stopPropagation(); removeFromQ(item.leadId) }}
