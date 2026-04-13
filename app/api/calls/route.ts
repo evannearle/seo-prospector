@@ -200,6 +200,15 @@ export async function POST(req: NextRequest) {
     const bizName = lead.name || 'your business'
     const reviews = lead.reviews || 0
     const rating  = lead.rating  || 0
+
+    // Normalize phone to E.164 — Google returns (516) 555-1234, Vapi needs +15165551234
+    const rawPhone = lead.phone || ''
+    const digits = rawPhone.replace(/\D/g, '')
+    // If 10 digits assume US, prepend +1. If 11 and starts with 1, prepend +. Otherwise use as-is.
+    const e164Phone = digits.length === 10 ? `+1${digits}`
+                    : digits.length === 11 && digits.startsWith('1') ? `+${digits}`
+                    : rawPhone.startsWith('+') ? rawPhone
+                    : `+${digits}`
     const sigs    = (lead.signals || []).map((k: string) => naturalSigLabel(k, { reviews, rating }))
     const sig1    = sigs[0] || 'low Google visibility'
     const sig2    = sigs[1] || 'an incomplete Google profile'
@@ -238,7 +247,7 @@ export async function POST(req: NextRequest) {
     const vapiBody = {
       phoneNumberId,
       customer: {
-        number: lead.phone,
+        number: e164Phone,
         name: bizName,
       },
       assistant: {
