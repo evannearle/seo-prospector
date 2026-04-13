@@ -130,15 +130,16 @@ export default function ProspectorTab() {
     const phone    = detail.formatted_phone_number || detail.international_phone_number || null
     const website  = detail.website || null
 
-    // GMB signals
-    if (reviews < 50)               add('fewReviews')
-    if (rating > 0 && rating < 4)   add('lowRating')
-    if (!website)                    add('noWebsite')
-    if (!phone)                      add('noPhone')
-    if (!hasHours)                   add('noHours')
-    if (photos < 5)                  add('fewPhotos')
+    // GMB signals — thresholds match signal labels
+    if (reviews < 25)               add('fewReviews')   // "Under 25 reviews"
+    if (rating > 0 && rating < 4.0) add('lowRating')    // "Rating below 4.0"
+    if (!website)                   add('noWebsite')
+    if (!phone)                     add('noPhone')
+    if (!hasHours)                  add('noHours')
+    if (photos < 5)                 add('fewPhotos')
 
     // Website signals (if web data available)
+    if (webData?.noSSL)           add('noSSL')    // SSL check doesn't need fetchOk
     if (webData?.fetchOk) {
       if (webData.noSchema)       add('noSchema')
       if (webData.noMeta)         add('noMeta')
@@ -146,13 +147,12 @@ export default function ProspectorTab() {
       if (webData.noCityMention)  add('noCityMention')
       if (webData.slowSite)       add('slowSite')
     }
-    if (webData?.noSSL)           add('noSSL')  // SSL check doesn't need fetchOk
 
     // Competitive signals
     const maxReviews = Math.max(...all.map(p => p.user_ratings_total || 0), 1)
-    if (reviews > 0 && maxReviews / reviews >= 2) add('outrankedOnReviews')
-    if (reviews < 50 && rating > 0 && rating < 4.4) add('lowEngagement')
-    const chains = ['angi','homeadvisor','1-800','rooter','aspen dental','heartland','pacific dental','western dental']
+    if (reviews > 0 && maxReviews / reviews >= 3)   add('outrankedOnReviews')  // 3x gap
+    if (reviews < 20 && rating > 0 && rating < 4.3) add('lowEngagement')
+    const chains = ['angi','homeadvisor','1-800','rooter','aspen dental','heartland','pacific dental','western dental','servpro']
     const top3Names = all.slice(0, 3).map(p => (p.name || '').toLowerCase())
     if (top3Names.some(n => chains.some(c => n.includes(c)))) add('chainDominates')
 
