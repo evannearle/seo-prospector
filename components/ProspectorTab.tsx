@@ -25,7 +25,7 @@ export default function ProspectorTab() {
   const [customNiche, setCustomNiche] = useState('')
   const [loc, setLoc]         = useState(settings.defaultLocation || 'Farmingdale, NY')
   const [maxR, setMaxR]       = useState(settings.defaultMaxResults || '40')
-  const [minScore, setMinScore] = useState('1') // default show all — filter after scanning
+  const [minScore, setMinScore] = useState('1')
 
   const [activeSigs, setActiveSigs] = useState<Set<string>>(new Set([
     'fewReviews','lowRating','noWebsite','noPhone','noHours','fewPhotos',
@@ -215,8 +215,9 @@ export default function ProspectorTab() {
         const lead = scorePlace(detail, places, currentActiveSigs, webData)
         const sigSummary = lead.signals.length
           ? lead.signals.slice(0,3).map((s:string) => SIGNALS[s]?.label || s).join(', ')
-          : 'strong profile — no weak signals found'
-        log(lead.score > 0 ? 'lok' : 'lwarn', `  ✓ ${lead.name.slice(0,28)} · ${lead.score}/10 · ${sigSummary}`)
+          : 'no weak signals — strong profile'
+        const logCls = lead.score >= parseInt(minScore) ? 'lok' : 'lwarn'
+        log(logCls, `  ${lead.score > 0 ? '✓' : '○'} ${lead.name.slice(0,30)} · score ${lead.score}/10${lead.score > 0 ? ' · ' + sigSummary : ''}`)
         if (lead.score >= parseInt(minScore)) scored.push(lead)
       }
       scored.sort((a, b) => b.score - a.score || b.signals.length - a.signals.length)
