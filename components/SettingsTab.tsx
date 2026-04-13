@@ -288,7 +288,12 @@ export default function SettingsTab() {
           <Row>
             <Field label="Default max results">
               <select value={s.defaultMaxResults} onChange={e => set('defaultMaxResults', e.target.value)} style={selStyle}>
-                <option value="20">20</option><option value="40">40</option><option value="60">60</option>
+                <option value="20">20</option>
+                <option value="40">40</option>
+                <option value="60">60</option>
+                <option value="100">100</option>
+                <option value="150">150</option>
+                <option value="200">200</option>
               </select>
             </Field>
             <Field label="Default minimum score">

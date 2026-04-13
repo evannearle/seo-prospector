@@ -323,7 +323,12 @@ export default function ProspectorTab() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <Field label="Max results">
               <select value={maxR} onChange={e => setMaxR(e.target.value)} style={inputStyle}>
-                <option value="20">20</option><option value="40">40</option><option value="60">60</option>
+                  <option value="20">20</option>
+                <option value="40">40</option>
+                <option value="60">60</option>
+                <option value="100">100</option>
+                <option value="150">150</option>
+                <option value="200">200</option>
               </select>
             </Field>
             <Field label="Min score (show all = 1+)">
