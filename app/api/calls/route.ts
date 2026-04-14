@@ -268,8 +268,8 @@ export async function POST(req: NextRequest) {
       offerLine = "I would love to set up a quick 15-minute call so we can walk through exactly what I found and what it would take to fix it.",
       maxCallDurationSeconds = 600,
       callModel = 'gpt-4o-mini',
-      voiceProvider = '11labs',
-      voiceId = 'oWAxZDx7w5VEj9dCyTzz',
+      voiceProvider = 'vapi',
+      voiceId = 'elliot',
       voiceSpeed = 1.1,
       voiceStability = 0.45,
       voiceSimilarityBoost = 0.75,
@@ -278,7 +278,19 @@ export async function POST(req: NextRequest) {
     } = config
 
     const niche   = lead.niche || 'business'
-    const city    = (lead.addr || '').split(',')[0] || 'your area'
+    // Extract city correctly from Google Places formatted_address
+    // Format: "123 Main St, Farmingdale, NY 11735, USA" -> city = "Farmingdale"
+    function extractCity(addr: string): string {
+      if (!addr) return 'your area'
+      const parts = addr.split(',').map((p: string) => p.trim())
+      // Find the state segment (2-letter code, possibly with zip)
+      const stateIdx = parts.findIndex((p: string) => /^[A-Z]{2}(\s+\d{5})?$/.test(p))
+      if (stateIdx > 0) return parts[stateIdx - 1]
+      // Fallback: second-to-last part (before country)
+      if (parts.length >= 3) return parts[parts.length - 3]
+      return parts[0] || 'your area'
+    }
+    const city = extractCity(lead.addr || '')
     const bizName = lead.name || 'your business'
     const reviews = lead.reviews || 0
     const rating  = lead.rating  || 0
@@ -351,13 +363,18 @@ export async function POST(req: NextRequest) {
           systemPrompt,
           temperature: aiTemperature,
         },
-        voice: {
-          provider: voiceProvider,
+        voice: voiceProvider === '11labs' ? {
+          provider: '11labs',
           voiceId,
           speed: voiceSpeed,
           stability: voiceStability,
           similarityBoost: voiceSimilarityBoost,
           optimizeStreamingLatency: voiceOptimizeLatency,
+        } : {
+          // Vapi native voices (elliot, savannah, etc.) or other providers
+          // don't support 11labs-specific params
+          provider: voiceProvider,
+          voiceId,
         },
         recordingEnabled: true,
         silenceTimeoutSeconds: 30,

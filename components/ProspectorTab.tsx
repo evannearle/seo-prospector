@@ -408,7 +408,16 @@ function ProspectCard({ p, niche }: { p: Lead; niche: string }) {
 }
 
 function buildHook(p: Lead, niche: string) {
-  const city = p.addr.split(',')[0] || 'your area'
+  // Extract city from Google Places formatted_address e.g. "123 Main St, Farmingdale, NY 11735, USA"
+  function extractCity(addr: string) {
+    if (!addr) return 'your area'
+    const parts = addr.split(',').map(p => p.trim())
+    const stateIdx = parts.findIndex(p => /^[A-Z]{2}(\s+\d{5})?$/.test(p))
+    if (stateIdx > 0) return parts[stateIdx - 1]
+    if (parts.length >= 3) return parts[parts.length - 3]
+    return parts[0] || 'your area'
+  }
+  const city = extractCity(p.addr)
   const top  = p.signals.slice(0, 2).map(s => SIGNALS[s]?.label?.toLowerCase() || s).join(' and ')
   const hs   = [
     `Hi — I came across ${p.name} while looking up ${niche}s in ${city} and noticed ${top}. Easy fixes that are probably costing you calls every week. Happy to send over a free audit if you're open to it?`,

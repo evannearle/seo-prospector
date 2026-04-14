@@ -72,8 +72,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxCallDurationSeconds: 600,
   delayBetweenCallsSeconds: 3,
   callModel: 'gpt-4o-mini',
-  voiceProvider: '11labs',
-  voiceId: 'oWAxZDx7w5VEj9dCyTzz',
+  voiceProvider: 'vapi',
+  voiceId: 'elliot',
   voiceSpeed: 1.1,
   voiceStability: 0.45,
   voiceSimilarityBoost: 0.75,
@@ -286,17 +286,18 @@ export default function SettingsTab() {
           <Row>
             <Field label="Voice provider" hint="ElevenLabs (11labs) has the most natural voices for sales calls.">
               <select value={s.voiceProvider} onChange={e => set('voiceProvider', e.target.value)} style={selStyle}>
-                <option value="11labs">ElevenLabs (11labs) — recommended</option>
+                <option value="vapi">Vapi (built-in) — recommended</option>
+                  <option value="11labs">ElevenLabs (11labs)</option>
                 <option value="openai">OpenAI</option>
                 <option value="playht">PlayHT</option>
                 <option value="azure">Azure</option>
               </select>
             </Field>
-            <Field label="Voice ID" hint="ElevenLabs Layla = oWAxZDx7w5VEj9dCyTzz · Find more at elevenlabs.io/voice-library">
+            <Field label="Voice ID" hint="Vapi voices: elliot · savannah · rohan · emma · clara · nico · kai · neil · ElevenLabs: paste voiceId from elevenlabs.io">
               <input value={s.voiceId} onChange={e => set('voiceId', e.target.value)}
-                placeholder="oWAxZDx7w5VEj9dCyTzz" style={inp} />
+                placeholder="elliot" style={inp} />
               <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>
-                Current: {s.voiceId === 'oWAxZDx7w5VEj9dCyTzz' ? '✓ Layla (ElevenLabs)' : s.voiceId || 'none set'}
+                Current: {s.voiceId || 'none set'}{['elliot','savannah','rohan','emma','clara','nico','kai','neil'].includes(s.voiceId) ? ' (Vapi built-in)' : s.voiceProvider === '11labs' ? ' (ElevenLabs)' : ''}
               </div>
             </Field>
           </Row>
@@ -366,7 +367,7 @@ export default function SettingsTab() {
           </Row>
 
           <div style={{ background: '#fafaf9', border: '1px solid #f0f0ec', borderRadius: 8, padding: '10px 14px', fontSize: 11, color: '#6b7280', lineHeight: 1.6 }}>
-            <strong>Recommended for sales calls:</strong> Layla voice · Speed 1.1 · Stability 0.45 · Similarity 0.75 · Latency 3 · GPT-4o Mini · Temp 0.7
+            <strong>Recommended for sales calls:</strong> Vapi Elliot voice (no 11labs needed) · or ElevenLabs Layla (oWAxZDx7w5VEj9dCyTzz) with Speed 1.1 · Stability 0.45 · Similarity 0.75 · Latency 3
           </div>
         </Section>
 
