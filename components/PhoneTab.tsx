@@ -14,7 +14,16 @@ import type { Lead, TranscriptLine } from '@/lib/types'
 function buildScriptPreview(lead: Lead | null): string {
   const s  = loadSettings()
   const niche   = lead?.niche || '[niche]'
-  const city    = lead?.addr?.split(',')[0] || '[city]'
+  // Extract city from Google Places formatted_address e.g. "123 Main St, Farmingdale, NY 11735, USA"
+  const city = (() => {
+    const addr = lead?.addr || ''
+    if (!addr) return '[city]'
+    const parts = addr.split(',').map(p => p.trim())
+    const stateIdx = parts.findIndex(p => /^[A-Z]{2}(\s+\d{5})?$/.test(p))
+    if (stateIdx > 0) return parts[stateIdx - 1]
+    if (parts.length >= 3) return parts[parts.length - 3]
+    return parts[0] || '[city]'
+  })()
   const biz     = lead?.name || '[Business Name]'
   const sig1    = lead?.signals?.[0] ? (SIGNALS[lead.signals[0]]?.label || lead.signals[0]) : '[issue 1]'
   const sig2    = lead?.signals?.[1] ? (SIGNALS[lead.signals[1]]?.label || lead.signals[1]) : '[issue 2]'
